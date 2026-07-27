@@ -73,6 +73,32 @@
     return nativeFetch(GATEWAY.replace(/\/+$/, '') + path, init);
   }
 
+  /* An https page calling http://localhost can be refused by the browser
+     rather than by the gateway — Chrome's Private Network Access check wants
+     an Access-Control-Allow-Private-Network header that OmniRoute does not
+     send. That failure looks identical to "gateway not running", so say which
+     it is out loud; otherwise this is genuinely undiagnosable from the UI. */
+  var warned = false;
+  function explain(err) {
+    if (warned) return;
+    warned = true;
+    var pna = location.protocol === 'https:' && /^http:\/\/(localhost|127\.)/.test(GATEWAY);
+    console.warn(
+      '%cMadeEA OS%c could not reach ' + GATEWAY + ' — ' + (err && err.message || err),
+      'color:#fd5812;font-weight:700', 'color:#a3b3c2'
+    );
+    if (pna) {
+      console.warn(
+        'This page is https and the gateway is http://localhost. If OmniRoute IS running, ' +
+        'your browser is blocking the call (Private Network Access). Two ways round it:\n' +
+        '  1. Open this app from your own machine instead of GitHub Pages.\n' +
+        '  2. Chrome → chrome://flags → "Block insecure private network requests" → Disabled.'
+      );
+    } else {
+      console.warn('Start the gateway with:  npm install -g omniroute && omniroute');
+    }
+  }
+
   /* ── one non-streamed completion, walking the fallback chain ─────────── */
   async function complete(messages, pinned) {
     var chain = pinned ? [pinned].concat(FREE_CHAIN) : FREE_CHAIN.slice();
@@ -116,6 +142,7 @@
         }
         return json({ running: r.ok, base: GATEWAY, api: GATEWAY + '/v1', dashboard: GATEWAY, apiStatus: r.status, models: n });
       } catch (e) {
+        explain(e);
         return json({ running: false, base: GATEWAY, api: GATEWAY + '/v1', dashboard: GATEWAY, apiStatus: null, models: null });
       }
     },
