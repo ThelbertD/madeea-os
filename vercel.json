@@ -1,0 +1,39 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+
+  "_comment": [
+    "The dashboard under /app/ is a Next static export built with",
+    "basePath '/madeea-os/app', because GitHub Pages serves this repo from",
+    "https://thelbertd.github.io/madeea-os/. Every asset URL in the HTML is",
+    "therefore absolute and starts with /madeea-os/.",
+    "",
+    "Vercel serves the repo at the domain root, so those URLs 404 and the page",
+    "renders as unstyled HTML. Rewriting /madeea-os/* to /* makes the existing",
+    "build work here untouched — no second build, and GitHub Pages is unaffected",
+    "since it ignores this file."
+  ],
+
+  "redirects": [
+    { "source": "/", "destination": "/app/", "permanent": false }
+  ],
+
+  "rewrites": [
+    { "source": "/madeea-os/:path*", "destination": "/:path*" }
+  ],
+
+  "headers": [
+    {
+      "source": "/app/_next/static/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
+      ]
+    },
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "X-Content-Type-Options", "value": "nosniff" },
+        { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" }
+      ]
+    }
+  ]
+}
