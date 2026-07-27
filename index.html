@@ -351,7 +351,11 @@ views.mission = () => {
     ${quick('mastermind','❋','Mastermind','Seven agents, each in character, answering together.')}
     ${quick('kanban','▤','Kanban','Drag cards across Ideas → Doing → Done.')}
     ${quick('todos','✓',"Today's List",'Tick things off. Saved in this browser.')}
-  </div>`;
+  </div>
+  <div class="divider">✦</div>
+  <h2>The real dashboard</h2>
+  <p class="sub" style="margin-bottom:16px">All 42 pages of the actual MadeEA OS interface, exported exactly as they look on your machine. Read-only — the panels are empty because there is no server behind them.</p>
+  <a class="btn btn-primary" href="app/">Open the full interface →</a>`;
 };
 const quick = (id,ico,t,d) => `<button class="card" style="text-align:left" onclick="go('${id}')">
   <div style="color:var(--accent);font-size:17px;margin-bottom:7px">${ico}</div>
