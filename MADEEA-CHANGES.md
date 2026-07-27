@@ -160,6 +160,36 @@ for the dashboard (locked to localhost) but **not** for this gateway.
 
 ---
 
+## 6. Open Design — fixed on Windows
+
+The **Open Design** tab reported "offline". Its guide
+(`install/21-OPEN-DESIGN.md`) covers macOS, Linux and WSL2 only, and the start
+script it prescribes fails here with *"web exited before exposing status"* and
+an empty log.
+
+Root cause: `apps/web` is built with Next's `output: "export"`, and
+`next start` refuses an exported build. The web half died on launch every
+time; the daemon was healthy throughout.
+
+Fix, kept in `tools/opendesign/` with full instructions:
+
+- `od-web-server.mjs` — serves `apps/web/out` statically and proxies
+  `/api/*` to the daemon on 7455, replacing the web process tools-dev could
+  not start
+- `od-host-start.sh` / `od-host-stop.sh` — the Start/Stop buttons' bridge
+  scripts, rewritten to start the daemon, build the web app if missing, then
+  run that server
+
+Also needed: `npm install -g pnpm@10.33.2` rather than `corepack enable`
+(which wants admin on Windows), and an explicit
+`pnpm --filter @open-design/web build` — tools-dev never builds it.
+
+Verified: daemon `{"ok":true,"version":"0.16.1"}` on 7455, web HTTP 200 on
+7456, the dashboard reporting `running · 127.0.0.1:7456`, and the studio
+embedding in the tab.
+
+---
+
 ## Related
 
 `omniroute-team-hub/` is excluded from this repo — it is a separate project
