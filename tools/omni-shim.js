@@ -303,7 +303,12 @@
        from the same machine — see tools/serve-local.mjs. From https the
        browser refuses both the probe and the frame. */
     'opendesign/status': async function () {
-      var WEB = 'http://127.0.0.1:7456';
+      // The tab embeds this URL in an iframe. From a public https page a
+      // http://127.0.0.1 frame is refused outright, so when the bridge is
+      // remote hand back its /odweb proxy instead — same UI, https origin.
+      var WEB = isRemoteBridge()
+        ? BRIDGE + '/odweb' + (TOKEN ? '?t=' + encodeURIComponent(TOKEN) : '')
+        : 'http://127.0.0.1:7456';
 
       // The daemon sends no Access-Control-Allow-Origin, so a direct browser
       // fetch is refused even over plain http. tools/serve-local.mjs relays it
