@@ -240,14 +240,72 @@
     'version': async function () { return json({ version: '2026-07-21' }); }
   };
 
-  /* Pages fetch many endpoints that need a real server. Returning a shaped
-     empty payload lets them render their normal empty state rather than
-     hanging on a 404. */
+  /* Pages fetch dozens of endpoints that need a real server. A 404 — or a
+     payload of the wrong shape — takes the whole React tree down: Mission
+     Control died on `.map` of undefined, Memory on `nodes is not iterable`,
+     Kanban on `.filter` of undefined, each rendering a blank page.
+     So the fallback is a generous superset: every key any view reads, with
+     an empty collection behind it. Views then draw their normal empty state.
+     Cheaper than a wrong guess, and it cannot crash. */
+  function universalEmpty(extra) {
+    var base = {
+      // collections
+      items: [], entries: [], list: [], data: [], results: [], history: [],
+      messages: [], sources: [], files: [], nodes: [], links: [], tasks: [],
+      columns: [], cards: [], todos: [], goals: [], notes: [], days: [],
+      builds: [], sessions: [], agents: [], models: [], recent: [], projects: [],
+      logs: [], events: [], posts: [], leads: [], ideas: [], artifacts: [],
+      // These exist because `board?.assignees.length` only guards `board` —
+      // optional chaining stops at the ?., so a missing collection one level
+      // down still throws. Anything a view might dereference gets an [].
+      assignees: [], boards: [], lanes: [], comments: [], parents: [],
+      children: [], runs: [], spawned: [], skipped_unassigned: [], stats: {},
+      // ok:false matters. Components branch on it — `if (j.ok) setState(j.state)`
+      // with ok:true stores undefined and the next render dereferences it.
+      // Reporting failure makes them draw their empty state instead.
+      ok: false, running: false, enabled: false, reachable: false,
+      state: null, board: null, result: null, detail: null,
+      count: 0, total: 0, used: 0, limit: 0,
+      date: new Date().toISOString().slice(0, 10),
+      today: new Date().toISOString().slice(0, 10),
+      unavailable: true,
+      reason: 'static export — no server behind this page'
+    };
+    if (extra) for (var k in extra) base[k] = extra[k];
+    return json(base);
+  }
+
+  // Shapes taken from the real route handlers, for the views that would
+  // otherwise crash before rendering anything.
+  var agentVital = function (extra) {
+    var v = { ok: false, version: '', latencyMs: 0, raw: '' };
+    if (extra) for (var k in extra) v[k] = extra[k];
+    return v;
+  };
+
+  var SHAPES = {
+    'memory/graph':  { nodes: [], links: [] },
+    // KanbanView reads board.boards.length, board.tasks.length and
+    // board.assignees.length before anything renders.
+    'content/board': { tasks: [], columns: [], boards: [], assignees: [], spawned: [], skipped_unassigned: [] },
+    'activity':      { entries: [] },
+    'memory/recent': { recent: [] },
+    'todos':         { todos: [] },
+    // Overview reads vitals.claude.latencyMs etc. directly — a missing agent
+    // key takes Mission Control down before it paints.
+    'vitals': {
+      ts: 0,
+      claude:      agentVital(),
+      openclaw:    agentVital({ gateway: 'down', degraded: false, busy: false, loopMaxMs: 0, loopP99Ms: 0, agents: [], sessions: [] }),
+      hermes:      agentVital({ model: '', provider: '' }),
+      antigravity: agentVital()
+    },
+    'tokens': { tokens: [], used: 0, limit: 0 }
+  };
+
   function emptyFor(path) {
-    if (/todos|goals|journal|activity|memory|content|leads|radar|astros/.test(path)) return json({ items: [], entries: [], todos: [], goals: [], notes: [] });
-    if (/workspace|builds|sessions|artifacts|library/.test(path)) return json({ builds: [], sessions: [], files: [], items: [] });
-    if (/status|health|vitals|tokens/.test(path)) return json({ running: false, ok: false, unavailable: true });
-    return json({ unavailable: true, reason: 'static export — no server behind this page' });
+    var key = Object.keys(SHAPES).filter(function (k) { return path.indexOf(k) === 0; })[0];
+    return universalEmpty(key ? SHAPES[key] : null);
   }
 
   window.fetch = function (input, init) {
