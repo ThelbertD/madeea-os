@@ -69,8 +69,33 @@
 
   var nativeFetch = window.fetch.bind(window);
 
+  /* Route selection.
+     Two things can stop a browser reaching a local service:
+       · the Open Design daemon sends no Access-Control-Allow-Origin, so a
+         direct call is refused even over http;
+       · Chrome blocks a public https origin from touching localhost at all
+         unless local-network access is permitted for the site.
+     tools/bridge.mjs solves the first (it adds CORS) and is the right place
+     to send everything, so prefer it and fall back to direct. */
+  var BRIDGE = 'http://127.0.0.1:20129';
+  var bridgeUp = null;                       // null = unknown, true/false once probed
+
+  async function haveBridge() {
+    if (bridgeUp !== null) return bridgeUp;
+    try {
+      var r = await nativeFetch(BRIDGE + '/health', { signal: AbortSignal.timeout(2500) });
+      bridgeUp = r.ok;
+    } catch (e) { bridgeUp = false; }
+    return bridgeUp;
+  }
+
   function gw(path, init) {
-    return nativeFetch(GATEWAY.replace(/\/+$/, '') + path, init);
+    // OmniRoute reflects the origin, so a direct call works wherever the page
+    // itself is allowed to reach localhost. Try it, then the bridge.
+    return nativeFetch(GATEWAY.replace(/\/+$/, '') + path, init).catch(async function (err) {
+      if (await haveBridge()) return nativeFetch(BRIDGE + '/omni' + path, init);
+      throw err;
+    });
   }
 
   /* An https page calling http://localhost can be refused by the browser
@@ -248,19 +273,30 @@
       // fetch is refused even over plain http. tools/serve-local.mjs relays it
       // server-side at /__od/health; try that first and fall back to direct in
       // case this page is served some other way.
+      // 1. the local launcher's relay, when this page is served by it
       try {
-        var viaHost = await nativeFetch('/__od/health', { signal: AbortSignal.timeout(6000) });
+        var viaHost = await nativeFetch('/__od/health', { signal: AbortSignal.timeout(5000) });
         if (viaHost.ok) {
           var j = await viaHost.json().catch(function () { return null; });
           return json({ healthy: !!(j && j.ok), url: WEB });
         }
-      } catch (e) { /* not served by the launcher — try direct */ }
+      } catch (e) { /* not served by the launcher */ }
 
+      // 2. the bridge, which adds the CORS headers the daemon omits
       try {
-        var r = await nativeFetch('http://127.0.0.1:7455/api/health', { signal: AbortSignal.timeout(6000) });
+        if (await haveBridge()) {
+          var viaBridge = await nativeFetch(BRIDGE + '/od/api/health', { signal: AbortSignal.timeout(5000) });
+          var jb = await viaBridge.json().catch(function () { return null; });
+          return json({ healthy: !!(jb && jb.ok), url: WEB });
+        }
+      } catch (e2) { /* bridge not running */ }
+
+      // 3. direct — only works if the daemon ever grows CORS headers
+      try {
+        var r = await nativeFetch('http://127.0.0.1:7455/api/health', { signal: AbortSignal.timeout(5000) });
         return json({ healthy: r.ok, url: WEB });
-      } catch (e2) {
-        explain(e2);
+      } catch (e3) {
+        explain(e3);
         return json({ healthy: false, url: WEB });
       }
     },
