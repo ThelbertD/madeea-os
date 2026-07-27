@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>MadeEA OS — your AI command centre</title>
+<meta name="description" content="One dashboard that runs Claude, Hermes, a voice assistant, an app builder and an AI company — all from your own machine, for free." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300..700&family=Cormorant+Garamond:ital,wght@0,600;0,700;1,600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  /* MadeEA brand palette — matches source/src/app/globals.css */
+  :root{
+    --bg:#09141f; --surface:#0e1f2f; --surface-2:#15293b; --border:#1c3247;
+    --fg:#f4f4f5; --muted:#a3b3c2; --faint:#6b7d8f;
+    --accent:#fd5812; --accent-soft:#ff7a42;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    background:var(--bg);color:var(--fg);
+    font-family:'DM Sans',system-ui,-apple-system,sans-serif;
+    line-height:1.6;-webkit-font-smoothing:antialiased;
+    background-image:
+      radial-gradient(ellipse 65% 45% at 12% 0%, rgba(253,88,18,.10), transparent 60%),
+      radial-gradient(ellipse 55% 40% at 88% 18%, rgba(255,122,66,.06), transparent 60%);
+    background-attachment:fixed;
+  }
+  .wrap{max-width:960px;margin:0 auto;padding:0 24px}
+  a{color:var(--accent-soft);text-decoration:none}
+  a:hover{text-decoration:underline}
+
+  /* ── header ─────────────────────────────────────────────── */
+  header{padding:80px 0 56px;text-align:center}
+  .eyebrow{
+    font-size:11px;letter-spacing:.25em;text-transform:uppercase;
+    color:var(--faint);font-weight:600;margin-bottom:14px
+  }
+  .wordmark{
+    font-family:'Cormorant Garamond',Georgia,serif;font-weight:700;
+    font-size:clamp(2.6rem,7vw,4.2rem);letter-spacing:-.02em;line-height:1
+  }
+  .wordmark em{font-style:italic;color:var(--accent);margin-left:.12em}
+  .tagline{color:var(--muted);font-size:clamp(1rem,2.2vw,1.2rem);margin-top:18px;max-width:620px;margin-inline:auto}
+  .cta{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-top:32px}
+  .btn{
+    display:inline-flex;align-items:center;gap:8px;border-radius:10px;
+    padding:11px 20px;font-size:15px;font-weight:500;transition:.15s
+  }
+  .btn-primary{background:var(--accent);color:#fff}
+  .btn-primary:hover{background:var(--accent-soft);text-decoration:none}
+  .btn-ghost{border:1px solid var(--border);color:var(--muted)}
+  .btn-ghost:hover{border-color:var(--accent);color:var(--fg);text-decoration:none}
+
+  /* ── notice ─────────────────────────────────────────────── */
+  .notice{
+    border:1px solid var(--border);border-left:3px solid var(--accent);
+    background:var(--surface);border-radius:10px;padding:18px 20px;margin:0 0 56px
+  }
+  .notice strong{color:var(--fg)}
+  .notice p{color:var(--muted);font-size:15px}
+
+  /* ── app mock ───────────────────────────────────────────── */
+  .mock{
+    border:1px solid var(--border);border-radius:14px;overflow:hidden;
+    background:var(--bg);display:grid;grid-template-columns:190px 1fr;
+    box-shadow:0 24px 70px rgba(0,0,0,.5);margin-bottom:12px
+  }
+  .mock-side{background:var(--surface);border-right:1px solid var(--border);padding:18px 14px}
+  .mock-brand{font-family:'Cormorant Garamond',serif;font-weight:700;font-size:19px;margin-bottom:20px}
+  .mock-brand em{font-style:italic;color:var(--accent)}
+  .mock-label{font-size:9px;letter-spacing:.2em;text-transform:uppercase;color:var(--faint);margin:16px 0 8px;font-weight:600}
+  .mock-item{font-size:12.5px;color:var(--muted);padding:6px 9px;border-radius:6px;margin-bottom:2px}
+  .mock-item.on{background:var(--surface-2);color:var(--fg);box-shadow:inset 2px 0 0 var(--accent)}
+  .mock-main{padding:24px}
+  .mock-h{font-size:26px;font-weight:600;letter-spacing:-.02em;margin-bottom:4px}
+  .mock-sub{color:var(--faint);font-size:12.5px;margin-bottom:18px}
+  .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:10px}
+  .tile{background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:12px}
+  .tile .k{font-size:9px;letter-spacing:.16em;text-transform:uppercase;color:var(--faint);font-weight:600}
+  .tile .v{font-size:18px;font-weight:600;margin-top:6px}
+  .tile .v.acc{color:var(--accent)}
+  .dot{width:6px;height:6px;border-radius:50%;background:#34d399;display:inline-block;margin-left:6px;vertical-align:middle}
+  .caption{text-align:center;color:var(--faint);font-size:12.5px;margin-bottom:64px}
+
+  /* ── sections ───────────────────────────────────────────── */
+  section{margin-bottom:64px}
+  h2{
+    font-family:'Cormorant Garamond',serif;font-weight:700;
+    font-size:1.9rem;letter-spacing:-.01em;margin-bottom:8px
+  }
+  .lede{color:var(--muted);margin-bottom:24px;max-width:640px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:14px}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:11px;padding:20px}
+  .card h3{font-size:15px;font-weight:600;margin-bottom:6px}
+  .card p{color:var(--muted);font-size:14px}
+  .card .tag{
+    display:inline-block;font-size:10px;letter-spacing:.1em;text-transform:uppercase;
+    color:var(--accent);border:1px solid rgba(253,88,18,.35);border-radius:99px;
+    padding:2px 8px;margin-bottom:10px;font-weight:600
+  }
+  pre{
+    background:var(--surface);border:1px solid var(--border);border-radius:10px;
+    padding:16px 18px;overflow-x:auto;font-family:'JetBrains Mono',ui-monospace,monospace;
+    font-size:13px;color:var(--fg);line-height:1.8
+  }
+  pre .c{color:var(--faint)}
+  ol{margin-left:20px;color:var(--muted)}
+  ol li{margin-bottom:10px}
+  ol li strong{color:var(--fg)}
+  footer{
+    border-top:1px solid var(--border);padding:28px 0 60px;
+    color:var(--faint);font-size:13px;text-align:center
+  }
+  @media(max-width:640px){
+    .mock{grid-template-columns:1fr}
+    .mock-side{display:none}
+    header{padding:56px 0 40px}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <div class="eyebrow">Local · Studio</div>
+    <div class="wordmark">MadeEA <em>OS</em></div>
+    <p class="tagline">One dashboard that runs Claude, Hermes, a voice assistant, an app builder and a whole AI company — from your own machine.</p>
+    <div class="cta">
+      <a class="btn btn-primary" href="https://github.com/ThelbertD/madeea-os">View on GitHub</a>
+      <a class="btn btn-ghost" href="#run">How to run it</a>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <div class="notice">
+    <p><strong>This page is a preview, not the app.</strong> MadeEA OS is a desktop tool: a Node server that drives CLIs, files and models on your own computer. GitHub Pages only serves static files, so the real dashboard can't run here — you run it locally at <code>localhost:3737</code>. The mock below shows what it looks like.</p>
+  </div>
+
+  <!-- Static mock of the real UI -->
+  <div class="mock">
+    <div class="mock-side">
+      <div class="mock-brand">MadeEA <em>OS</em></div>
+      <div class="mock-label">Workspace</div>
+      <div class="mock-item on">Mission Control</div>
+      <div class="mock-label">Agent Orchestration</div>
+      <div class="mock-item">Paperclip</div>
+      <div class="mock-item">AI Agent Mastermind</div>
+      <div class="mock-item">Pipeline</div>
+      <div class="mock-label">Agents</div>
+      <div class="mock-item">Claude</div>
+      <div class="mock-item">Hermes</div>
+      <div class="mock-item">OmniRoute</div>
+    </div>
+    <div class="mock-main">
+      <div class="mock-h">Mission Control</div>
+      <div class="mock-sub">Status of every agent, every memory, every signal.</div>
+      <div class="tiles">
+        <div class="tile"><div class="k">Heartbeat</div><div class="v acc">6</div></div>
+        <div class="tile"><div class="k">Latency</div><div class="v">0<span style="font-size:11px;color:var(--faint)">ms</span></div></div>
+        <div class="tile"><div class="k">Free Claude</div><div class="v">Live<span class="dot"></span></div></div>
+        <div class="tile"><div class="k">Models</div><div class="v acc">99</div></div>
+      </div>
+    </div>
+  </div>
+  <p class="caption">Mission Control — the real dashboard, running locally.</p>
+
+  <section>
+    <h2>What's inside</h2>
+    <p class="lede">Forty-two pages. Set up only what you'll use — a tab that needs a tool you haven't installed simply stays quiet.</p>
+    <div class="grid">
+      <div class="card"><span class="tag">Free</span><h3>OmniRoute</h3><p>A local gateway routing across free providers. No API key, nothing leaves your machine.</p></div>
+      <div class="card"><span class="tag">Free</span><h3>AI Agent Mastermind</h3><p>Seven agents in a live group chat, each with its own character.</p></div>
+      <div class="card"><h3>Hermes &amp; Jarvis</h3><p>An agent that does multi-step jobs with real tools, plus a voice you can talk to.</p></div>
+      <div class="card"><h3>Paperclip</h3><p>Run a team of AI agents like a company, with an org chart.</p></div>
+      <div class="card"><h3>Studios</h3><p>Video, music, games, thumbnails — describe it and watch it get built.</p></div>
+      <div class="card"><h3>Memory</h3><p>Your Obsidian vault as a living, navigable galaxy.</p></div>
+    </div>
+  </section>
+
+  <section id="run">
+    <h2>Run it yourself</h2>
+    <p class="lede">Needs <a href="https://nodejs.org">Node.js 20+</a>. Takes a few minutes the first time, seconds after that.</p>
+    <pre><span class="c"># 1 — get the code</span>
+git clone https://github.com/ThelbertD/madeea-os.git
+cd madeea-os/source
+
+<span class="c"># 2 — install and start</span>
+npm install
+npm run dev
+
+<span class="c"># 3 — open http://localhost:3737 in Chrome</span></pre>
+    <p class="lede" style="margin-top:20px">For free AI with no API key, run the gateway alongside it:</p>
+    <pre>npm install -g omniroute &amp;&amp; omniroute   <span class="c"># leave running</span></pre>
+  </section>
+
+  <section>
+    <h2>Good to know</h2>
+    <ol>
+      <li><strong>It runs on your computer.</strong> The dashboard binds to localhost, so nobody else on your network can open it.</li>
+      <li><strong>You bring your own keys.</strong> The repo ships placeholders only. Most tabs work without any key; some need their own.</li>
+      <li><strong>Free models throttle.</strong> OmniRoute walks a fallback chain across free providers, so replies occasionally fail — that's normal, and <a href="https://github.com/ThelbertD/madeea-os/blob/main/MADEEA-CHANGES.md">MADEEA-CHANGES.md</a> explains how to switch models.</li>
+      <li><strong>Use it at your own risk.</strong> It's a power tool that runs agents on your machine — see <a href="https://github.com/ThelbertD/madeea-os/blob/main/DISCLAIMER.md">DISCLAIMER.md</a>.</li>
+    </ol>
+  </section>
+
+</div>
+
+<footer>
+  <div class="wrap">
+    MadeEA OS · built on the Agent OS pack (build 2026-07-21) by Julian Goldie / AI Profit Boardroom<br />
+    <a href="https://github.com/ThelbertD/madeea-os">github.com/ThelbertD/madeea-os</a>
+  </div>
+</footer>
+
+</body>
+</html>
