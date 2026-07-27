@@ -88,3 +88,52 @@ Verified through the launcher:
 |---|---|
 | Open Design | `running · 127.0.0.1:7456`, studio embedded in the tab |
 | OmniRoute | `Gateway live · 99 models`, prompt enabled |
+
+---
+
+## "vela binary not found; install vela or configure VELA_BIN"
+
+Open Design ships with **amr** as its default agent, and amr's binary is
+`vela`, which is not installed — so onboarding stopped with that error before
+anything could be created.
+
+amr is only one of ~15 supported runtimes. `apps/daemon/src/runtimes/executables.ts`
+maps each to a binary:
+
+| agentId | binary |
+|---|---|
+| amr | `vela` ← default, absent |
+| claude | `claude` ← installed, authenticated |
+| hermes | `hermes` ← installed |
+| codex, aider, copilot, cursor-agent, kimi … | not installed |
+
+Fix — switch the agent in `~/open-design/.od/app-config.json`:
+
+```json
+{ "agentId": "claude" }
+```
+
+Stop the host first (`bash od-host-stop.sh`), edit, then start again — the
+daemon rewrites this file while running. A backup is kept at
+`app-config.json.bak`.
+
+Verified: the vela error is gone and onboarding offers **Local coding agent**
+(now Claude) or **Bring your own key**.
+
+## Two ways to finish onboarding
+
+**Local coding agent** — zero config. Uses the `claude` CLI already on your
+PATH and already signed in. Nothing else needed.
+
+**Bring your own key, pointed at OmniRoute** — free, no real key. On the BYOK
+screen choose **OpenAI** as the provider and enter:
+
+| Field | Value |
+|---|---|
+| API key | `free-local` |
+| Base URL | `http://localhost:20128/v1` |
+| Model | `oc/deepseek-v4-flash-free` |
+
+OmniRoute is OpenAI-compatible, so Open Design treats it as a normal provider
+and every request stays on your machine at no cost. Requires `omniroute` to be
+running.
