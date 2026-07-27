@@ -48,11 +48,14 @@ export async function setEnabled(enabled: boolean): Promise<void> {
   await writeFile(STATE_FILE, JSON.stringify({ enabled }, null, 2));
 }
 
-// Free Claude Code now runs on OmniRoute (the fcc-server on :8082 is retired —
-// its `fcc` binary isn't even installed). "Reachable" = the OmniRoute gateway
-// is up on :20128.
+// Is fcc-server itself listening? (install/5-FREE-CLAUDE-CODE.md). This is a
+// separate question from whether OmniRoute is up, and the two answers pick
+// different spawn envs — so probe the proxy, not the gateway.
 export async function probeReachable(): Promise<boolean> {
-  return probeOmniRoute();
+  try {
+    const r = await fetch(`${FCC_BASE}/health`, { signal: AbortSignal.timeout(2500) });
+    return r.ok;
+  } catch { return false; }
 }
 
 async function readActiveModel(): Promise<string | null> {
@@ -89,14 +92,24 @@ function providerNameFromModel(model: string | null): string | null {
 }
 
 export async function getState(): Promise<FccState> {
-  const [{ enabled }, reachable] = await Promise.all([readState(), probeReachable()]);
-  // The spawn env (fccSpawnEnv) hard-points at OmniRoute now, so report that —
-  // NOT the stale MODEL that may linger in ~/.fcc/.env from the old fcc-server.
-  return { enabled, reachable, model: OMNIROUTE_FREE_MODEL, provider: "OmniRoute · free pool" };
+  const [{ enabled }, fccUp] = await Promise.all([readState(), probeReachable()]);
+
+  // Prefer fcc-server when it is listening: it translates the Anthropic API
+  // the `claude` CLI speaks, which OmniRoute alone will not do. Fall back to
+  // the gateway otherwise, so a fresh install still works with nothing extra.
+  if (fccUp) {
+    const model = await readActiveModel();
+    return {
+      enabled,
+      reachable: true,
+      model: model ?? OMNIROUTE_FREE_MODEL,
+      provider: providerNameFromModel(model) ?? "fcc-server",
+    };
+  }
+
+  const omni = await probeOmniRoute();
+  return { enabled, reachable: omni, model: OMNIROUTE_FREE_MODEL, provider: "OmniRoute · free pool" };
 }
-// kept for reference; the old fcc-server model discovery is retired.
-void readActiveModel;
-void providerNameFromModel;
 
 // Env vars the Free Claude Code agent ALWAYS uses — these point the claude
 // CLI at our local fcc-server, which routes to whatever upstream is configured
@@ -105,10 +118,26 @@ void providerNameFromModel;
 // CRITICAL: setting ANTHROPIC_API_KEY here is what makes the Claude CLI use
 // our proxy token instead of the OAuth credentials saved by `claude login`.
 // Without this, OAuth wins and fcc-server returns 401.
-export function fccSpawnEnv(): Record<string, string> {
+export async function fccSpawnEnv(): Promise<Record<string, string>> {
   // Free Claude Code now points the `claude` CLI at the OmniRoute gateway, which
   // routes to 90+ free providers with auto-fallback. (Was the fcc-server on
   // :8082 — retired; its binary isn't installed.)
+  //
+  // UPDATE 2026-07-27: fcc-server IS installed here (install/5-FREE-CLAUDE-CODE.md),
+  // and it is the better target. Pointed straight at OmniRoute the CLI fails —
+  //   API Error: 400 Ambiguous model 'claude-opus-4-8'.
+  //   Use provider/model prefix (ex: cc/claude-opus-4-8)
+  // because the CLI sends bare Anthropic model ids that the gateway will not
+  // resolve. fcc-server speaks the Anthropic API properly and maps those ids
+  // onto whatever ~/.fcc/.env selects, so it is used whenever it is listening.
+  if (await probeReachable()) {
+    return {
+      ANTHROPIC_BASE_URL: FCC_BASE,
+      ANTHROPIC_API_KEY: FCC_TOKEN,
+      ANTHROPIC_AUTH_TOKEN: FCC_TOKEN,
+      CLAUDE_CODE_AUTO_COMPACT_WINDOW: "190000",
+    };
+  }
   return {
     ...omnirouteClaudeEnv(),
     CLAUDE_CODE_AUTO_COMPACT_WINDOW: "190000",

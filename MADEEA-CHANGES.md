@@ -190,6 +190,25 @@ embedding in the tab.
 
 ---
 
+## 7. Free Claude Code (install/5) — installed, and two bugs fixed
+
+The guide describes `fcc-server`; the shipped code had retired it in favour of
+pointing the `claude` CLI straight at OmniRoute. That does not work — the CLI
+sends bare Anthropic model ids and the gateway rejects them as ambiguous.
+
+Installed fcc-server and fixed two things so the tab actually works:
+
+- `src/lib/runner.ts` — `shell: true` on win32. Windows cannot spawn the
+  `.cmd` agent shims otherwise; every message returned 500 with `spawn EINVAL`.
+- `src/lib/fcc.ts` — `fccSpawnEnv()` is async and probes :8082 itself,
+  preferring fcc-server when running and falling back to OmniRoute when not.
+  `probeReachable()` now checks the proxy rather than the gateway.
+
+Full detail, including the config workaround and why the reported cost is not
+a real charge, in `tools/fcc/README.md`.
+
+---
+
 ## Related
 
 `omniroute-team-hub/` is excluded from this repo — it is a separate project

@@ -1,0 +1,20 @@
+# Free Claude Code — routed through the local OmniRoute gateway.
+#
+# The guide offers two options, neither available here: Ollama has no model
+# pulled, and its OpenRouter picks need an API key.
+#
+# fcc-server has no generic "openai" provider — it rejects it and lists what
+# it accepts. Two of those, `lmstudio` and `llamacpp`, are just OpenAI-compatible
+# local endpoints with a configurable base URL, so `lmstudio` is used here as
+# the transport and pointed at OmniRoute. Free, keyless, already running.
+#
+# If you add an OpenRouter key later, swap to a NAMED :free model, e.g.
+#   MODEL="open_router/qwen/qwen3-coder:free"
+# Never use a "stealth"/"alpha" model — they get retired without warning.
+
+LM_STUDIO_BASE_URL="http://127.0.0.1:20128/v1"
+
+MODEL="lmstudio/oc/deepseek-v4-flash-free"
+MODEL_OPUS="lmstudio/oc/deepseek-v4-flash-free"
+MODEL_SONNET="lmstudio/oc/deepseek-v4-flash-free"
+MODEL_HAIKU="lmstudio/oc/deepseek-v4-flash-free"

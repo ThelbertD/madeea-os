@@ -71,6 +71,11 @@ export interface RunResult {
   durationMs: number;
 }
 
+// On Windows the agent CLIs are .cmd/.ps1 shims, and Node refuses to spawn
+// those without a shell — it throws `spawn EINVAL`, which surfaced as the
+// Free Claude Code panel returning 500 on every message.
+const NEEDS_SHELL = process.platform === "win32";
+
 export async function run(
   agent: AgentName,
   args: readonly string[],
@@ -89,6 +94,7 @@ export async function run(
     const child = spawn(bin, cleanArgs, {
       cwd: opts.cwd ?? process.env.HOME,
       env: agentEnv(opts.extraEnv ?? {}),
+      shell: NEEDS_SHELL,
     });
     let stdout = "";
     let stderr = "";
@@ -123,6 +129,7 @@ export function spawnStream(
     cwd: opts.cwd ?? process.env.HOME,
     env: agentEnv(opts.extraEnv ?? {}),
     stdio: ["pipe", "pipe", "pipe"],
+    shell: NEEDS_SHELL,
   }) as ChildProcessWithoutNullStreams;
   if (typeof opts.input === "string" && opts.input.length > 0) {
     // Write the prompt to stdin (no OS arg-length limit, no per-arg cap).

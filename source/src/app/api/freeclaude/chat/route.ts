@@ -97,7 +97,7 @@ export async function POST(req: Request) {
     "--include-partial-messages",
     "--verbose",
     withSteer(fullPrompt),
-  ], { cwd, extraEnv: fccSpawnEnv() });
+  ], { cwd, extraEnv: await fccSpawnEnv() });
 
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
