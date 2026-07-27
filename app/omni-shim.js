@@ -237,6 +237,45 @@
       }
     },
 
+    /* Open Design runs two local services: daemon 7455 (health) and web 7456
+       (the iframe). Reachable only when this page is itself served over http
+       from the same machine — see tools/serve-local.mjs. From https the
+       browser refuses both the probe and the frame. */
+    'opendesign/status': async function () {
+      var WEB = 'http://127.0.0.1:7456';
+
+      // The daemon sends no Access-Control-Allow-Origin, so a direct browser
+      // fetch is refused even over plain http. tools/serve-local.mjs relays it
+      // server-side at /__od/health; try that first and fall back to direct in
+      // case this page is served some other way.
+      try {
+        var viaHost = await nativeFetch('/__od/health', { signal: AbortSignal.timeout(6000) });
+        if (viaHost.ok) {
+          var j = await viaHost.json().catch(function () { return null; });
+          return json({ healthy: !!(j && j.ok), url: WEB });
+        }
+      } catch (e) { /* not served by the launcher — try direct */ }
+
+      try {
+        var r = await nativeFetch('http://127.0.0.1:7455/api/health', { signal: AbortSignal.timeout(6000) });
+        return json({ healthy: r.ok, url: WEB });
+      } catch (e2) {
+        explain(e2);
+        return json({ healthy: false, url: WEB });
+      }
+    },
+
+    // Start/Stop shell out to od-host-start.sh on the real server. A browser
+    // cannot spawn a process, so say so rather than failing silently.
+    'opendesign/control': async function () {
+      return json({
+        ok: false,
+        error: 'Start/Stop needs the desktop dashboard. Run: bash ~/open-design/od-host-start.sh'
+      }, 501);
+    },
+
+    'opendesign/projects': async function () { return json({ projects: [], items: [] }); },
+
     'version': async function () { return json({ version: '2026-07-21' }); }
   };
 

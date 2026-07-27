@@ -55,3 +55,36 @@ your PATH — nothing in this pack needs a key for it.
 - Ports 7455 and 7456 must be free.
 - `node-pty` build scripts are skipped by pnpm; nothing here needed them.
 - Projects save to `~/open-design/.od/projects/`.
+
+---
+
+## Using Open Design from the exported pages
+
+`/app/opendesign/` on **GitHub Pages can never work**. Chrome refuses an https
+page any access to your machine — verified in a real browser:
+
+```
+fetch  →  BLOCKED: Failed to fetch
+iframe →  0 frames loaded
+```
+
+That is Private Network Access, and it covers iframes as well as fetch, so no
+page code gets around it.
+
+Served over plain http from your own machine, the identical files work:
+
+```bash
+node tools/serve-local.mjs        # → http://localhost:4173/madeea-os/app/
+```
+
+One extra wrinkle: the Open Design daemon sends no `Access-Control-Allow-Origin`
+header (OmniRoute reflects the origin, which is why that one works directly), so
+even over http a browser fetch to :7455 is refused. `serve-local.mjs` relays it
+at `/__od/health`, and the shim uses that when present.
+
+Verified through the launcher:
+
+| | |
+|---|---|
+| Open Design | `running · 127.0.0.1:7456`, studio embedded in the tab |
+| OmniRoute | `Gateway live · 99 models`, prompt enabled |
