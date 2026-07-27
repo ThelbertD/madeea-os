@@ -1,7 +1,9 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "redirects": [
-    { "source": "/", "destination": "/app/", "permanent": false }
+    { "source": "/", "destination": "/madeea-os/app/", "permanent": false },
+    { "source": "/app", "destination": "/madeea-os/app/", "permanent": false },
+    { "source": "/app/:path*", "destination": "/madeea-os/app/:path*", "permanent": false }
   ],
   "rewrites": [
     { "source": "/madeea-os/:path*/", "destination": "/:path*/index.html" },

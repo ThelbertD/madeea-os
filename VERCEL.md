@@ -17,6 +17,21 @@ exist — so without help every asset 404s and you get unstyled markup:
 `vercel.json` fixes it by rewriting `/madeea-os/*` → `/*`, so one build serves
 both hosts. GitHub Pages ignores the file.
 
+## The URL must keep the /madeea-os/ prefix
+
+The build hard-codes `basePath: /madeea-os/app`. Served at a path that does not
+match, Next's router disagrees with the server-rendered HTML and React throws
+a hydration error (#418) on every page:
+
+| URL | result |
+|---|---|
+| `/app/` | 1 hydration error |
+| `/madeea-os/app/` | clean |
+
+So the canonical address here is
+**https://madeea-os.vercel.app/madeea-os/app/**, and `vercel.json` redirects
+`/` and `/app/*` there. Redirects run before rewrites, so there is no loop.
+
 ## Settings
 
 | Setting | Value |
