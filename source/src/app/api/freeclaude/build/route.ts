@@ -133,8 +133,11 @@ async function streamOllama(prompt: string, onTok: (c: string) => void): Promise
 // Quality fallback: build with the REAL Claude CLI (the user's own subscription).
 // One-shot text mode — no agentic tool loop, just "write the HTML".
 async function claudeBuild(prompt: string, cwd: string): Promise<string> {
+  // Resolved before the executor: a Promise executor is not async, so the
+  // await cannot live inside it.
+  const extraEnv = await fccSpawnEnv();
   return await new Promise<string>((resolve, reject) => {
-    const child = spawnStream("claude", ["-p", "--output-format", "text", `${SYSTEM}\n\n${prompt}`], { cwd, extraEnv: await fccSpawnEnv() });
+    const child = spawnStream("claude", ["-p", "--output-format", "text", `${SYSTEM}\n\n${prompt}`], { cwd, extraEnv });
     let out = "";
     const timer = setTimeout(() => { try { child.kill("SIGTERM"); } catch { /* */ } reject(new Error("claude build timeout")); }, 240_000);
     child.stdout.on("data", (b: Buffer) => { out += b.toString(); });
