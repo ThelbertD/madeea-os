@@ -1,0 +1,59 @@
+{
+  "_note": "MadeEA OS config. Written 2026-07-27. Routes the AI Agent Mastermind through the local OmniRoute gateway (http://localhost:20128) so every agent runs free with no API key. Delete a roomAgents entry to send that agent back to its OpenRouter default.",
+
+  "userName": "You",
+  "_username_note": "Change this to your first name — it is shown in the Agent Room and Mastermind.",
+
+  "locationLabel": "Local",
+
+  "_model_note": "All agents share oc/deepseek-v4-flash-free — verified working 2026-07-27. OmniRoute advertises 99 models but most are unreachable: aug/* needs the 'auggie' CLI installed, ddgw/* (DuckDuckGo) is rate-limited, tllm/* returns 403, and the auto/* combos were exhausting their fallback chains. Three aliases that appear in /v1/models are not even valid combos: auto/gemini, auto/llama, auto/glm. Personality still differs per agent — that comes from each agent's persona prompt, not the model.",
+  "_model_retry_note": "Free pools fluctuate. If replies start failing, re-test with: curl -s http://localhost:20128/v1/chat/completions -H 'Content-Type: application/json' -d '{\"model\":\"oc/big-pickle\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}],\"stream\":false}' and swap in whichever model answers.",
+
+  "roomAgents": {
+    "claude": {
+      "provider": "openai",
+      "baseUrl": "http://localhost:20128/v1",
+      "apiKeyEnv": "OMNIROUTE_API_KEY",
+      "model": "oc/deepseek-v4-flash-free"
+    },
+    "hermes": {
+      "provider": "openai",
+      "baseUrl": "http://localhost:20128/v1",
+      "apiKeyEnv": "OMNIROUTE_API_KEY",
+      "model": "oc/deepseek-v4-flash-free"
+    },
+    "gemini": {
+      "provider": "openai",
+      "baseUrl": "http://localhost:20128/v1",
+      "apiKeyEnv": "OMNIROUTE_API_KEY",
+      "model": "oc/deepseek-v4-flash-free"
+    },
+    "codex": {
+      "provider": "openai",
+      "baseUrl": "http://localhost:20128/v1",
+      "apiKeyEnv": "OMNIROUTE_API_KEY",
+      "model": "oc/deepseek-v4-flash-free"
+    },
+    "openclaw": {
+      "provider": "openai",
+      "baseUrl": "http://localhost:20128/v1",
+      "apiKeyEnv": "OMNIROUTE_API_KEY",
+      "model": "oc/deepseek-v4-flash-free"
+    },
+    "glm": {
+      "provider": "openai",
+      "baseUrl": "http://localhost:20128/v1",
+      "apiKeyEnv": "OMNIROUTE_API_KEY",
+      "model": "oc/deepseek-v4-flash-free",
+      "noReasoning": true
+    },
+    "fcc": {
+      "provider": "openai",
+      "baseUrl": "http://localhost:20128/v1",
+      "apiKeyEnv": "OMNIROUTE_API_KEY",
+      "model": "oc/deepseek-v4-flash-free"
+    }
+  },
+
+  "goalCategories": ["Health", "Personal", "Work", "Learning", "Side Project"]
+}

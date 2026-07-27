@@ -1,0 +1,26 @@
+# Dependencies / build output
+node_modules/
+.next/
+out/
+dist/
+*.tsbuildinfo
+
+# Real env files may gain live API keys — never commit them.
+# The tracked template is source/.env.local.example
+.env
+.env.local
+.env.*.local
+
+# omniroute-team-hub is its own repository:
+# https://github.com/ThelbertD/omniroute-team-hub
+omniroute-team-hub/
+
+# Runtime state
+.netlify/
+*.log
+npm-debug.log*
+
+# OS noise
+.DS_Store
+Thumbs.db
+desktop.ini
