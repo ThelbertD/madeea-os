@@ -87,16 +87,22 @@
      ?bridge=off clears it. */
   var BRIDGE = store.get('bridge', 'http://127.0.0.1:20129');
   var TOKEN = store.get('token', '');
+  // Open Design's UI asks for its assets from the origin root, so proxying it
+  // under /odweb breaks them. Give it its own tunnel and point the iframe there.
+  var ODWEB = store.get('odweb', '');
 
   (function readQuery() {
     try {
       var q = new URLSearchParams(location.search);
       var b = q.get('bridge');
       var t = q.get('t');
+      var ow = q.get('odweb');
+      if (ow === 'off') { ODWEB = ''; store.set('odweb', ''); }
+      else if (ow) { ODWEB = ow.replace(/\/+$/, ''); store.set('odweb', ODWEB); }
       if (b === 'off') { store.set('bridge', 'http://127.0.0.1:20129'); store.set('token', ''); BRIDGE = 'http://127.0.0.1:20129'; TOKEN = ''; }
       else if (b) { BRIDGE = b.replace(/\/+$/, ''); store.set('bridge', BRIDGE); }
       if (t) { TOKEN = t; store.set('token', TOKEN); }
-      if (b || t) {
+      if (b || t || ow) {
         // Drop the credentials from the address bar so they are not shared
         // by copy-paste or leaked in a Referer header.
         history.replaceState({}, '', location.pathname + location.hash);
@@ -306,9 +312,11 @@
       // The tab embeds this URL in an iframe. From a public https page a
       // http://127.0.0.1 frame is refused outright, so when the bridge is
       // remote hand back its /odweb proxy instead — same UI, https origin.
-      var WEB = isRemoteBridge()
-        ? BRIDGE + '/odweb' + (TOKEN ? '?t=' + encodeURIComponent(TOKEN) : '')
-        : 'http://127.0.0.1:7456';
+      var WEB = ODWEB
+        ? ODWEB
+        : (isRemoteBridge()
+            ? BRIDGE + '/odweb' + (TOKEN ? '?t=' + encodeURIComponent(TOKEN) : '')
+            : 'http://127.0.0.1:7456');
 
       // The daemon sends no Access-Control-Allow-Origin, so a direct browser
       // fetch is refused even over plain http. tools/serve-local.mjs relays it
