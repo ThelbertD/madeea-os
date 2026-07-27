@@ -58,3 +58,45 @@ They will not work from `*.vercel.app` any more than from GitHub Pages: Chrome
 blocks a public https origin from reaching services on your machine. See
 `tools/opendesign/README.md`. Run `node tools/start-all.mjs` and use
 `http://localhost:4173/madeea-os/app/` for a fully working dashboard.
+
+---
+
+## Connecting the deployed site to your machine
+
+The AI tabs need services running on your computer, and a browser forbids a
+public https page from reaching localhost. As of Chrome 150 that is a per-site
+**permission** — measured, including with `Access-Control-Allow-Private-Network`
+set, which used to be sufficient:
+
+```
+fetch  →  BLOCKED: Permission was denied for this request to access the
+          loopback address space
+iframe →  0 frames loaded
+```
+
+A tunnel removes the problem rather than working around it: published at an
+https address, the page is making an ordinary cross-origin request.
+
+```bash
+node tools/tunnel.mjs
+```
+
+Starts the bridge with a fresh token, tunnels it, and prints one link to open
+once. The page stores the address and token and clears them from the URL.
+
+**Verified from https://madeea-os.vercel.app in stock Chrome, no flags:**
+
+| | |
+|---|---|
+| OmniRoute | `Gateway live · 99 models` |
+| Mastermind | real reply — *"Hi from Codex here."* |
+| Open Design status | `healthy: true` |
+| Open Design **embed** | does not load — see below |
+
+The studio's own UI navigates to its `127.0.0.1` origin, which a public page
+cannot follow. Its status reports correctly, but the embed only works at
+`localhost:3737`.
+
+⚠ **The tunnel URL is public.** The token is what keeps your gateway private,
+so do not paste the link anywhere shared. Quick tunnels are ephemeral — the
+URL dies when you stop the process, and a new one is issued next time.
