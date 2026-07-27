@@ -1,14 +1,10 @@
 {
   "_note": "MadeEA OS config. Written 2026-07-27. Routes the AI Agent Mastermind through the local OmniRoute gateway (http://localhost:20128) so every agent runs free with no API key. Delete a roomAgents entry to send that agent back to its OpenRouter default.",
-
   "userName": "You",
   "_username_note": "Change this to your first name — it is shown in the Agent Room and Mastermind.",
-
   "locationLabel": "Local",
-
   "_model_note": "All agents share oc/deepseek-v4-flash-free — verified working 2026-07-27. OmniRoute advertises 99 models but most are unreachable: aug/* needs the 'auggie' CLI installed, ddgw/* (DuckDuckGo) is rate-limited, tllm/* returns 403, and the auto/* combos were exhausting their fallback chains. Three aliases that appear in /v1/models are not even valid combos: auto/gemini, auto/llama, auto/glm. Personality still differs per agent — that comes from each agent's persona prompt, not the model.",
   "_model_retry_note": "Free pools fluctuate. If replies start failing, re-test with: curl -s http://localhost:20128/v1/chat/completions -H 'Content-Type: application/json' -d '{\"model\":\"oc/big-pickle\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}],\"stream\":false}' and swap in whichever model answers.",
-
   "roomAgents": {
     "claude": {
       "provider": "openai",
@@ -54,6 +50,15 @@
       "model": "oc/deepseek-v4-flash-free"
     }
   },
-
-  "goalCategories": ["Health", "Personal", "Work", "Learning", "Side Project"]
+  "goalCategories": [
+    "Health",
+    "Personal",
+    "Work",
+    "Learning",
+    "Side Project"
+  ],
+  "nlmBin": "C:\\Users\\USER\\.local\\bin\\notebooklm-mcp.exe",
+  "_nlmBin_note": "Installed via: uv tool install notebooklm-mcp-cli. Run `nlm login` once to authorise Google.",
+  "claude": "C:\\Users\\USER\\AppData\\Roaming\\npm\\claude.cmd",
+  "_claude_note": "Explicit path: the Node server resolves `claude` differently from the shell on Windows, so vitals reported it missing."
 }

@@ -8,9 +8,15 @@ export const dynamic = "force-dynamic";
 // We probe /v1/models (fast, unauthenticated list on most builds) and fall back
 // to the dashboard root, so the section can show a live green/red state.
 
-const BASE = "http://localhost:20128";
+// Honour OMNIROUTE_BASE_URL like the rest of the app (src/lib/omniroute.ts),
+// and default to 127.0.0.1 rather than localhost: on Windows the name costs
+// ~200ms to resolve against ~5ms for the literal address, because it tries
+// IPv6 first and falls back.
+const BASE = (process.env.OMNIROUTE_BASE_URL || "http://127.0.0.1:20128").replace(/\/+$/, "");
 
-async function ping(path: string, ms = 1500): Promise<number | null> {
+// 1500ms was too tight — a cold gateway took 6s here and the tab reported
+// "offline" while curl against the same URL returned 200.
+async function ping(path: string, ms = 6000): Promise<number | null> {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), ms);
   try {
