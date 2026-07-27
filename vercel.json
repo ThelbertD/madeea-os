@@ -4,6 +4,7 @@
     { "source": "/", "destination": "/app/", "permanent": false }
   ],
   "rewrites": [
+    { "source": "/madeea-os/:path*/", "destination": "/:path*/index.html" },
     { "source": "/madeea-os/:path*", "destination": "/:path*" }
   ],
   "headers": [

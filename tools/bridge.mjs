@@ -28,8 +28,11 @@ import { Readable } from 'node:stream';
 const PORT = Number(process.argv[2] || process.env.BRIDGE_PORT || 20129);
 const ALLOWED = [
   'https://thelbertd.github.io',
+  'https://madeea-os.vercel.app',
   ...(process.env.BRIDGE_ORIGINS || '').split(',').map((s) => s.trim()).filter(Boolean),
 ];
+// Vercel preview deployments get a new hostname per build.
+const ALLOWED_RE = /^https:\/\/madeea-os-[a-z0-9-]+\.vercel\.app$/;
 
 const TARGETS = {
   omni:  'http://localhost:20128',
@@ -38,7 +41,7 @@ const TARGETS = {
 };
 
 function cors(res, origin) {
-  if (origin && (ALLOWED.includes(origin) || /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin))) {
+  if (origin && (ALLOWED.includes(origin) || ALLOWED_RE.test(origin) || /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin))) {
     res.setHeader('Access-Control-Allow-Origin', origin);
   }
   res.setHeader('Vary', 'Origin');
