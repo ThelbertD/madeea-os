@@ -137,3 +137,52 @@ screen choose **OpenAI** as the provider and enter:
 OmniRoute is OpenAI-compatible, so Open Design treats it as a normal provider
 and every request stays on your machine at no cost. Requires `omniroute` to be
 running.
+
+---
+
+## Using it from https://thelbertd.github.io/madeea-os/app/opendesign/
+
+This **does** work, but only after one Chrome setting, and the reason is worth
+knowing.
+
+Chrome forbids a public https origin from touching anything on your machine.
+Measured against the live site with every service running:
+
+```
+fetch  →  BLOCKED: Permission was denied for this request to access the
+          loopback address space
+iframe →  0 frames loaded
+```
+
+Private Network Access used to be a header handshake — answer the preflight
+with `Access-Control-Allow-Private-Network: true` and the call is allowed.
+`tools/bridge.mjs` sends exactly that header, and Chrome **still** refuses:
+as of Chrome 150 this is a per-site *permission*, not a header negotiation.
+
+With the check disabled, the same live page works completely:
+
+```
+via bridge :20129   OK 200
+direct :20128       OK 200
+opendesign :7455    OK 200
+iframe on 7456      1 frame loaded
+```
+
+### Turn it on (once)
+
+1. `chrome://flags/#local-network-access-checks` → **Disabled**
+2. `chrome://flags/#block-insecure-private-network-requests` → **Disabled**
+3. Relaunch Chrome
+
+Only do this if you are comfortable with it — it relaxes a browser protection
+for every site, not just this one. Serving the pages locally needs no such
+change, which is why that is the recommended route.
+
+### Start everything
+
+```bash
+node tools/start-all.mjs
+```
+
+Brings up OmniRoute, the Open Design host, the bridge and the local page host,
+skipping anything already running, then prints what is actually up.
