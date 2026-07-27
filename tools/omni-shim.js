@@ -77,23 +77,59 @@
          unless local-network access is permitted for the site.
      tools/bridge.mjs solves the first (it adds CORS) and is the right place
      to send everything, so prefer it and fall back to direct. */
-  var BRIDGE = 'http://127.0.0.1:20129';
+  /* The bridge may be local, or published over https by a tunnel — which is
+     the only way a page on vercel.app or github.io can reach this machine,
+     since the browser forbids it touching localhost directly.
+
+     Configure once by visiting the page with:
+        ?bridge=https://xxxx.trycloudflare.com&t=TOKEN
+     Both are remembered, so later visits need no query string.
+     ?bridge=off clears it. */
+  var BRIDGE = store.get('bridge', 'http://127.0.0.1:20129');
+  var TOKEN = store.get('token', '');
+
+  (function readQuery() {
+    try {
+      var q = new URLSearchParams(location.search);
+      var b = q.get('bridge');
+      var t = q.get('t');
+      if (b === 'off') { store.set('bridge', 'http://127.0.0.1:20129'); store.set('token', ''); BRIDGE = 'http://127.0.0.1:20129'; TOKEN = ''; }
+      else if (b) { BRIDGE = b.replace(/\/+$/, ''); store.set('bridge', BRIDGE); }
+      if (t) { TOKEN = t; store.set('token', TOKEN); }
+      if (b || t) {
+        // Drop the credentials from the address bar so they are not shared
+        // by copy-paste or leaked in a Referer header.
+        history.replaceState({}, '', location.pathname + location.hash);
+      }
+    } catch (e) { /* no URLSearchParams support is not worth handling */ }
+  })();
+
+  function bridgeInit(init) {
+    var o = init ? Object.assign({}, init) : {};
+    o.headers = Object.assign({}, o.headers || {});
+    if (TOKEN) o.headers.Authorization = 'Bearer ' + TOKEN;
+    return o;
+  }
+
   var bridgeUp = null;                       // null = unknown, true/false once probed
 
   async function haveBridge() {
     if (bridgeUp !== null) return bridgeUp;
     try {
-      var r = await nativeFetch(BRIDGE + '/health', { signal: AbortSignal.timeout(2500) });
+      var r = await nativeFetch(BRIDGE + '/health', bridgeInit({ signal: AbortSignal.timeout(6000) }));
       bridgeUp = r.ok;
     } catch (e) { bridgeUp = false; }
     return bridgeUp;
   }
 
+  function isRemoteBridge() { return /^https:/i.test(BRIDGE); }
+
   function gw(path, init) {
-    // OmniRoute reflects the origin, so a direct call works wherever the page
-    // itself is allowed to reach localhost. Try it, then the bridge.
+    // A tunnelled bridge is the only route that works from a public origin, so
+    // when one is configured go straight there rather than failing first.
+    if (isRemoteBridge()) return nativeFetch(BRIDGE + '/omni' + path, bridgeInit(init));
     return nativeFetch(GATEWAY.replace(/\/+$/, '') + path, init).catch(async function (err) {
-      if (await haveBridge()) return nativeFetch(BRIDGE + '/omni' + path, init);
+      if (await haveBridge()) return nativeFetch(BRIDGE + '/omni' + path, bridgeInit(init));
       throw err;
     });
   }
@@ -285,7 +321,7 @@
       // 2. the bridge, which adds the CORS headers the daemon omits
       try {
         if (await haveBridge()) {
-          var viaBridge = await nativeFetch(BRIDGE + '/od/api/health', { signal: AbortSignal.timeout(5000) });
+          var viaBridge = await nativeFetch(BRIDGE + '/od/api/health', bridgeInit({ signal: AbortSignal.timeout(5000) }));
           var jb = await viaBridge.json().catch(function () { return null; });
           return json({ healthy: !!(jb && jb.ok), url: WEB });
         }
@@ -417,6 +453,9 @@
   // Let the console page (and anyone debugging) retarget the gateway.
   window.__madeeaShim = {
     gateway: GATEWAY,
+    bridge: BRIDGE,
+    hasToken: !!TOKEN,
+    setBridge: function (u, t) { BRIDGE = u.replace(/\/+$/, ''); store.set('bridge', BRIDGE); if (t) { TOKEN = t; store.set('token', t); } bridgeUp = null; },
     setGateway: function (u) { GATEWAY = u; try { localStorage.setItem(LS + 'gateway', u); } catch (e) {} },
     agents: AGENTS,
     chain: FREE_CHAIN

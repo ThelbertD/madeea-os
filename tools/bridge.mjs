@@ -24,8 +24,29 @@
  */
 import http from 'node:http';
 import { Readable } from 'node:stream';
+import { randomBytes } from 'node:crypto';
 
 const PORT = Number(process.argv[2] || process.env.BRIDGE_PORT || 20129);
+
+/**
+ * Shared secret. Required on every request that does not come from this
+ * machine — because when the bridge is published through a tunnel, its URL is
+ * reachable by anyone on the internet, and behind it sit your AI gateway and
+ * the Open Design daemon. Origin checking alone is not enough: only browsers
+ * send Origin honestly, and curl can claim anything.
+ */
+const TOKEN = process.env.BRIDGE_TOKEN || randomBytes(16).toString('hex');
+
+function authorised(req, url) {
+  const bearer = (req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim();
+  if (bearer && bearer === TOKEN) return true;
+  if (url.searchParams.get('t') === TOKEN) return true;
+  // Requests originating from this machine are trusted without the token, so
+  // the local launcher keeps working unchanged.
+  const origin = req.headers.origin || '';
+  if (!origin || /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) return true;
+  return false;
+}
 const ALLOWED = [
   'https://thelbertd.github.io',
   'https://madeea-os.vercel.app',
@@ -60,6 +81,10 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'OPTIONS') { res.writeHead(204); return res.end(); }
 
   const url = new URL(req.url, 'http://x');
+  if (!authorised(req, url)) {
+    res.writeHead(401, { 'Content-Type': 'application/json' });
+    return res.end(JSON.stringify({ error: 'bad or missing token' }));
+  }
   const seg = url.pathname.split('/').filter(Boolean);
 
   if (seg[0] === 'health') {
@@ -115,5 +140,6 @@ server.listen(PORT, '127.0.0.1', () => {
   console.log(`\n  MadeEA OS bridge  →  http://127.0.0.1:${PORT}`);
   console.log(`  allows: ${ALLOWED.join(', ')}`);
   console.log(`  routes: ${Object.entries(TARGETS).map(([k, v]) => `/${k}/* → ${v}`).join('\n          ')}`);
+  console.log(`  token:  ${TOKEN}`);
   console.log('\n  Ctrl+C to stop.\n');
 });
