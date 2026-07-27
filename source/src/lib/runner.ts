@@ -71,10 +71,17 @@ export interface RunResult {
   durationMs: number;
 }
 
-// On Windows the agent CLIs are .cmd/.ps1 shims, and Node refuses to spawn
-// those without a shell — it throws `spawn EINVAL`, which surfaced as the
-// Free Claude Code panel returning 500 on every message.
-const NEEDS_SHELL = process.platform === "win32";
+// On Windows, Node refuses to spawn a .cmd/.ps1 shim without a shell — it
+// throws `spawn EINVAL`, which surfaced as the Free Claude Code panel
+// returning 500 on every message.
+//
+// But a shell breaks stdin: cmd.exe does not forward the piped prompt to the
+// child, so the model received nothing and replied "your message came through
+// blank". So only shell out when the target really is a shim — a real .exe
+// spawns directly and keeps its stdin.
+function needsShell(bin: string): boolean {
+  return process.platform === "win32" && !/\.exe$/i.test(bin);
+}
 
 export async function run(
   agent: AgentName,
@@ -94,7 +101,7 @@ export async function run(
     const child = spawn(bin, cleanArgs, {
       cwd: opts.cwd ?? process.env.HOME,
       env: agentEnv(opts.extraEnv ?? {}),
-      shell: NEEDS_SHELL,
+      shell: needsShell(bin),
     });
     let stdout = "";
     let stderr = "";
@@ -129,7 +136,7 @@ export function spawnStream(
     cwd: opts.cwd ?? process.env.HOME,
     env: agentEnv(opts.extraEnv ?? {}),
     stdio: ["pipe", "pipe", "pipe"],
-    shell: NEEDS_SHELL,
+    shell: needsShell(bin),
   }) as ChildProcessWithoutNullStreams;
   if (typeof opts.input === "string" && opts.input.length > 0) {
     // Write the prompt to stdin (no OS arg-length limit, no per-arg cap).

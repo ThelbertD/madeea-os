@@ -64,6 +64,13 @@ Start it: `fcc-server` (leave running). Admin UI at
 `.cmd` shims and Node refuses to spawn them without a shell. `src/lib/runner.ts`
 now passes `shell: true` on win32.
 
+**The shell fix broke stdin — replies said the prompt was blank.** The route
+pipes the prompt to the CLI on stdin, and `cmd.exe` does not forward it to the
+child, so the model got nothing and answered *"It looks like your message came
+through blank."* The real fix is to avoid the shell: point at
+`~/.local/bin/claude.exe` rather than the npm `.cmd` shim, and shell out only
+for binaries that are not `.exe`.
+
 **The tab ignored fcc-server.** `fccSpawnEnv()` hard-pointed at OmniRoute.
 It is now async, probes `:8082/health` itself, and uses the proxy when it is
 up — falling back to the gateway otherwise, so a machine without fcc-server is
