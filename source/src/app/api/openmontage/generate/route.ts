@@ -28,8 +28,14 @@ export async function POST(req: Request) {
   const jobFile = path.join(jobsDir, `${jobId}.json`);
   const outFile = path.join(outDir, `${jobId}.mp4`);
 
+  // "python3" is not a real interpreter on Windows — it is a Microsoft Store
+  // alias stub that prints an install prompt and exits, so the script never
+  // runs and the job silently never starts. Use "python" there.
+  const py = process.env.OPENMONTAGE_PYTHON
+    ?? (process.platform === "win32" ? "python" : "python3");
+
   const child = spawn(
-    "python3",
+    py,
     [script, "--prompt", prompt.trim().slice(0, 600), countFlag, String(n),
       "--out", outFile, "--job", jobFile],
     { detached: true, stdio: "ignore", cwd: ws }

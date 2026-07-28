@@ -558,6 +558,49 @@ dashboard all did survive.
 
 ---
 
+## 17. OpenMontage (install/26) — cannot be completed on this pack
+
+Prerequisites the guide lists are all met: ffmpeg 8.1.1, Python 3.11.15, tab
+serves 200. It still cannot generate, for reasons the guide does not mention.
+
+### The generation scripts do not exist
+
+`api/openmontage/generate` runs
+
+```
+<hermesHome>/profiles/openmontage/workspace/scripts/cinematic_om.py
+<hermesHome>/profiles/openmontage/workspace/scripts/movie_om.py
+```
+
+Neither file ships with the pack, the `openmontage` Hermes profile is never
+created, and nothing anywhere clones, downloads or scaffolds them — the only
+mention of those filenames in the entire tree is the route that spawns them.
+So the tab is wired to a workspace that has no way to come into existence.
+
+### It also needs a paid OpenRouter key
+
+The guide says to reuse "your OpenRouter key … in `~/.hermes/auth.json`". No
+such file exists in any Hermes home here, and there is no OpenRouter key
+configured at all. Generation bills OpenRouter per run (~$0.30 Cinematic,
+~$2–3 Movie), so this needs an account with credit — the user's decision.
+
+### One real bug fixed anyway
+
+`generate/route.ts` spawned `"python3"`. On Windows that is not an
+interpreter: it is the Microsoft Store alias stub, which prints an install
+prompt and exits. `command -v python3` succeeds, so it looks present:
+
+```
+python3 --version → "Python was not found; run without arguments to install…"
+python  --version → Python 3.11.15
+```
+
+The job would have silently never started. Now picks `python` on win32,
+overridable with `OPENMONTAGE_PYTHON`. Worth having for when the scripts do
+exist — but it does not make the tab usable on its own.
+
+---
+
 ## Related
 
 `omniroute-team-hub/` is excluded from this repo — it is a separate project
