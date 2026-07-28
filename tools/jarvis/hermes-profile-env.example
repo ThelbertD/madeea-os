@@ -1,17 +1,17 @@
 # Hermes profile environment — read by MadeEA OS for Jarvis's voice.
 #
-# NOTE: install/3 says this file lives at ~/.hermes/profiles/main/.env.
-# On this machine HERMES_HOME is %LOCALAPPDATA%\hermes, so the real path is
-# the one you are reading now. The app resolves it via hermesHome() +
-# profiles/<active_profile>/.env, so this is where it actually looks.
+# Real path on this machine (NOT the ~/.hermes/profiles/main/.env the guide
+# gives — HERMES_HOME here is %LOCALAPPDATA%\hermes):
+#   C:\Users\USER\AppData\Local\hermes\profiles\main\.env
 #
-# ── Jarvis speaking voice (install/3, Part B) ──────────────────────────────
-# Sign up free at https://elevenlabs.io, copy your API key, and uncomment:
-# ELEVENLABS_API_KEY=your_key_here
-#
-# Optional — a specific voice. ElevenLabs → Voices → click one → copy Voice ID.
-# Without this it uses the default British voice.
-# AGENTIC_OS_TTS_VOICE=your_voice_id
-#
-# Restart the dashboard after adding a key:
-#   cd "MadeEA OS/source" && PORT=3737 npm start
+# The live file lives outside this repo and must stay there. This is a
+# template only — never copy the live file over it.
+
+ELEVENLABS_API_KEY=your_key_here
+
+# The pack's built-in default (21m00Tcm4TlvDq8ikWAM, "Rachel") is a LIBRARY
+# voice, and a free plan cannot synthesise with those through the API:
+#   402 — "Free users cannot use library voices via the API."
+# Use a premade voice from your own account instead. Daniel is British and
+# suits the butler voice the guide describes.
+AGENTIC_OS_TTS_VOICE=onwK4e9ZLuTAKqWW03F9
