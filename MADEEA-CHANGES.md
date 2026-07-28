@@ -509,6 +509,55 @@ says requires consent.
 
 ---
 
+## 16. Video Editor (install/33)
+
+The tab ships with the pack; what was missing is the **video-use skill** it
+drives. The guide does not say where that comes from, and the `video-use`
+package on npm is a different project by a different author — a frame-extraction
+MCP server, not this. The real source is named only in a code comment in
+`source/src/lib/videouse.ts`: **<https://github.com/browser-use/video-use>**.
+
+Installed per its own `install.md`:
+
+```bash
+git clone https://github.com/browser-use/video-use ~/Developer/video-use
+cd ~/Developer/video-use && uv sync
+# register (Windows: junction, no admin needed — `ln -sfn` in its docs is Unix)
+New-Item -ItemType Junction -Path ~\.claude\skills\video-use -Target ~\Developer\video-use
+printf 'ELEVENLABS_API_KEY=…\n' > ~/Developer/video-use/.env
+```
+
+The junction matters: `helpers/` must sit beside `SKILL.md`, so the whole repo
+directory is linked rather than the file.
+
+### Its own sanity check gives a false negative here
+
+`install.md` says to probe `/v1/user` and treat **401 as a bad key — stop**.
+That key returns 401 on `/v1/user` *and* `/v1/models`, because it is scoped
+without `user_read`. It nonetheless works for everything that matters. Testing
+the endpoint the skill actually uses:
+
+```
+POST /v1/speech-to-text  →  {"text":"[tone]","words":[{"start":0.0,"end":0.74,…}]}
+```
+
+Word-level timestamps, which is precisely what video-use cuts on. Had I
+followed the instruction literally I would have abandoned a working install.
+
+### Verified
+
+`helpers OK`, ffprobe 8.1.1, `/video-use` returns 200, jobs endpoint responds.
+A full transcription test was skipped deliberately — `install.md` notes it
+burns Scribe credits and is better done on the user's first real clip.
+
+### Session-restart note
+
+Open Design does not survive a reboot of the shell session; restart it with
+`bash ~/open-design/od-host-start.sh`. OmniRoute, fcc-server, Ollama and the
+dashboard all did survive.
+
+---
+
 ## Related
 
 `omniroute-team-hub/` is excluded from this repo — it is a separate project
