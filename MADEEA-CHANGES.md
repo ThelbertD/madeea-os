@@ -209,6 +209,35 @@ a real charge, in `tools/fcc/README.md`.
 
 ---
 
+## 8. Windows install (install/25) — production build + agent paths
+
+The guide's Path B is `npm install` → `npm run build` → `npm start`. Until now
+the dashboard had only ever been run with `npm run dev`, which is why routes
+compiled on demand and intermittently answered 404 or HTML instead of JSON.
+
+The production build also typechecks, and passed clean across every source
+edit in this file.
+
+Its done-check verified: Node v24.16.0 (needs v20+), dashboard 200 on
+localhost:3737. The split-Hermes gotcha it warns about is absent —
+`~/.hermes` does not exist and `HERMES_HOME` is persisted at user level as
+`%LOCALAPPDATA%\hermes`.
+
+Two agents were reported missing despite being installed, both for the same
+Windows reason: auto-detect resolves an extensionless or `.cmd` shim, which
+Node cannot spawn. `config.json` now carries explicit `.exe` paths:
+
+| | |
+|---|---|
+| claude | `~/.local/bin/claude.exe` |
+| hermes | `…/hermes-agent/venv/Scripts/hermes.exe` |
+
+Both now report `ok: true` in vitals — hermes on `minimax-m3:cloud`.
+
+Restart without rebuilding: `cd source && PORT=3737 npm start`.
+
+---
+
 ## Related
 
 `omniroute-team-hub/` is excluded from this repo — it is a separate project
