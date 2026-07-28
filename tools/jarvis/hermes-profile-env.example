@@ -1,0 +1,17 @@
+# Hermes profile environment — read by MadeEA OS for Jarvis's voice.
+#
+# NOTE: install/3 says this file lives at ~/.hermes/profiles/main/.env.
+# On this machine HERMES_HOME is %LOCALAPPDATA%\hermes, so the real path is
+# the one you are reading now. The app resolves it via hermesHome() +
+# profiles/<active_profile>/.env, so this is where it actually looks.
+#
+# ── Jarvis speaking voice (install/3, Part B) ──────────────────────────────
+# Sign up free at https://elevenlabs.io, copy your API key, and uncomment:
+# ELEVENLABS_API_KEY=your_key_here
+#
+# Optional — a specific voice. ElevenLabs → Voices → click one → copy Voice ID.
+# Without this it uses the default British voice.
+# AGENTIC_OS_TTS_VOICE=your_voice_id
+#
+# Restart the dashboard after adding a key:
+#   cd "MadeEA OS/source" && PORT=3737 npm start

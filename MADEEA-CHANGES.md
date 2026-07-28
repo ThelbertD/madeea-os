@@ -302,6 +302,44 @@ page with `engine: "local"`, and the chat still answers correctly.
 
 ---
 
+## 11. Jarvis voice (install/3) — Part A ready, Part B needs your key
+
+**Part A (listening) needs nothing installed.** The microphone uses the
+browser's own speech recognition, so it works in Chrome as soon as you allow
+the mic. The Hermes tab serves 200.
+
+**Part B (speaking) is blocked on an ElevenLabs key**, which the guide is
+explicit you must create yourself — *"never let an AI log in for you"*. Until
+then the app degrades exactly as documented:
+
+```
+/api/video/voices → {"ok":false,"error":"ElevenLabs not connected — add
+                     ELEVENLABS_API_KEY to ~/.hermes/profiles/<active>/.env"}
+```
+
+### The path in the guide is wrong for this machine
+
+It says `~/.hermes/profiles/main/.env`. The app actually resolves
+`hermesHome()/profiles/<active_profile>/.env`, and `HERMES_HOME` here is
+`%LOCALAPPDATA%\hermes`. There is no `active_profile` file, so it falls back to
+`main`. The real path is:
+
+```
+C:\Users\USER\AppData\Local\hermes\profiles\main\.env
+```
+
+Created, with both settings present as commented lines — adding a key is one
+uncomment plus a dashboard restart. Template kept at
+`tools/jarvis/hermes-profile-env.example`.
+
+### The memory half is already live
+
+Jarvis's recall reads the vault from install/11, which is now connected —
+12 notes currently visible to it. So *"what do you remember about…"* will work
+the moment the voice does.
+
+---
+
 ## Related
 
 `omniroute-team-hub/` is excluded from this repo — it is a separate project
