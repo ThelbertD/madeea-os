@@ -482,8 +482,314 @@
       var j = OMJOBS[id];
       if (!j) return json({ error: 'bad id' }, 400);
       return json(j);
+    },
+
+    /* ── Video Editor, in the browser ──────────────────────────────────
+       The local editor drives Claude Code + the video-use skill, which
+       transcribes with ElevenLabs Scribe and cuts on word boundaries.
+       None of that exists on a static host.
+
+       What a browser *can* do honestly is find the dead air itself: decode
+       the audio with Web Audio, measure loudness, and drop the silent runs.
+       That covers "remove dead air, long pauses" — the part of the brief
+       doing most of the work. Captions need transcription, so they are
+       reported as skipped rather than silently ignored. */
+
+    'videouse/jobs': async function (req) {
+      if (req.method !== 'POST') return json({ jobs: vuJobs() });
+      var form = await req.formData();
+      var file = form.get('video');
+      if (!file || !file.name) return json({ error: 'no video file' }, 400);
+      var requested = String(form.get('job') || '');
+      var name = /^[a-z0-9-]{1,60}$/.test(requested)
+        ? requested
+        : vSlug(file.name.replace(/\.[a-z0-9]+$/i, '')) + '-' + Date.now().toString(36).slice(-4);
+      await vuPut(name, file.name, file);
+      var list = vuJobs();
+      list.unshift({ name: name, mtime: Date.now(), sources: [file.name],
+                     hasFinal: false, running: false });
+      vuSave(list);
+      return json({ job: name, file: file.name, bytes: file.size, root: '(browser)' });
+    },
+
+    'videouse/status': async function (req, url) {
+      var name = url.searchParams.get('job') || '';
+      var st = VUSTATE[name] || {};
+      var job = vuJobs().filter(function (j) { return j.name === name; })[0];
+      return json({
+        job: name,
+        running: !!st.running,
+        log: st.log || [],
+        outputs: (job && job.outputs) || [],
+        summary: st.summary || (job && job.summary) || '',
+        instruction: st.instruction || ''
+      });
+    },
+
+    'videouse/run': async function (req) {
+      var b = await req.json().catch(function () { return {}; });
+      var name = String(b.job || ''), instruction = String(b.instruction || '');
+      if (!name || !instruction) return json({ error: 'need job + instruction' }, 400);
+      var job = vuJobs().filter(function (j) { return j.name === name; })[0];
+      if (!job) return json({ error: 'bad job' }, 400);
+      if (VUSTATE[name] && VUSTATE[name].running) return json({ error: 'job already running' }, 409);
+
+      var st = VUSTATE[name] = { running: true, log: [], summary: '', instruction: instruction };
+      var say = function (line) { st.log.push(line); };
+
+      vuEdit(name, job.sources[0], instruction, say)
+        .then(function (r) {
+          var list = vuJobs();
+          list.forEach(function (j) {
+            if (j.name === name) {
+              j.hasFinal = true; j.mtime = Date.now();
+              j.outputs = [{ rel: 'edit/final.mp4', bytes: r.bytes, mtime: Date.now() }];
+              j.summary = r.summary;
+            }
+          });
+          vuSave(list);
+          st.summary = r.summary;
+          say('✓ done — edit/final.mp4');
+        })
+        .catch(function (e) { say('✗ ' + String((e && e.message) || e)); })
+        .then(function () { st.running = false; });
+
+      return json({ ok: true, pid: 0 });
+    },
+
+    'videouse/file': async function (req, url) {
+      var job = url.searchParams.get('job') || '', rel = url.searchParams.get('path') || '';
+      var blob = await vuGet(job, rel);
+      if (!blob) return json({ error: 'not found' }, 404);
+      return new Response(blob, { headers: { 'Content-Type': blob.type || 'video/mp4' } });
     }
   };
+
+  /* ── Video Editor engine ──────────────────────────────────────────── */
+
+  var VUSTATE = {};            // per-job transient run state
+  var VUURLS = {};             // "job rel" → object URL
+
+  function vuJobs() { return store.get('vuJobs', []); }
+  function vuSave(v) { store.set('vuJobs', v); }
+  function vuKey(job, rel) { return 'vu:' + job + ':' + rel; }
+
+  function vuPut(job, rel, blob) { return vPutVideo(vuKey(job, rel), blob); }
+  async function vuGet(job, rel) {
+    return await vDB(function (db, resolve) {
+      var rq = db.transaction('videos', 'readonly').objectStore('videos').get(vuKey(job, rel));
+      rq.onsuccess = function () { resolve(rq.result || null); };
+      rq.onerror = function () { resolve(null); };
+    }).catch(function () { return null; });
+  }
+  async function vuBlobURL(job, rel) {
+    var k = job + ' ' + rel;
+    if (VUURLS[k]) return VUURLS[k];
+    var blob = await vuGet(job, rel);
+    if (!blob) return '';
+    VUURLS[k] = URL.createObjectURL(blob);
+    return VUURLS[k];
+  }
+
+  function vuOnce(el, ev) {
+    return new Promise(function (res, rej) {
+      var ok = function () { el.removeEventListener('error', bad); res(); };
+      var bad = function () { el.removeEventListener(ev, ok); rej(new Error('media error')); };
+      el.addEventListener(ev, ok, { once: true });
+      el.addEventListener('error', bad, { once: true });
+    });
+  }
+
+  /* Find the parts worth keeping: RMS per 20ms window, and any run quieter
+     than the threshold for longer than minGap is dropped. The threshold is
+     relative to the track's own loudness, so it adapts to quiet recordings
+     instead of using a fixed dB floor. */
+  async function vuSegments(blob, duration, say) {
+    var ac;
+    try { ac = new (window.AudioContext || window.webkitAudioContext)(); }
+    catch (e) { return null; }
+    var audio;
+    try { audio = await ac.decodeAudioData(await blob.arrayBuffer()); }
+    catch (e) { try { ac.close(); } catch (e2) {} return null; }
+
+    var sr = audio.sampleRate, ch = audio.getChannelData(0);
+    var win = Math.max(1, Math.round(sr * 0.02)), n = Math.floor(ch.length / win);
+    var rms = new Float32Array(n), loud = 0;
+    for (var i = 0; i < n; i++) {
+      var s = 0;
+      for (var k = 0; k < win; k++) { var x = ch[i * win + k]; s += x * x; }
+      rms[i] = Math.sqrt(s / win);
+      if (rms[i] > loud) loud = rms[i];
+    }
+    try { ac.close(); } catch (e) {}
+    if (!loud) return null;
+
+    var thresh = Math.max(loud * 0.06, 0.006);
+    var minGap = 0.35, pad = 0.08;
+    var segs = [], start = null;
+    for (var j = 0; j < n; j++) {
+      var t = (j * win) / sr, loudEnough = rms[j] >= thresh;
+      if (loudEnough && start === null) start = t;
+      if (!loudEnough && start !== null) {
+        var quietFor = 0, m = j;
+        while (m < n && rms[m] < thresh) { quietFor += win / sr; m++; }
+        if (quietFor >= minGap || m >= n) {
+          segs.push([Math.max(0, start - pad), Math.min(duration, t + pad)]);
+          start = null;
+          j = m - 1;
+        }
+      }
+    }
+    if (start !== null) segs.push([Math.max(0, start - pad), duration]);
+
+    var merged = [];
+    for (var p = 0; p < segs.length; p++) {
+      var last = merged[merged.length - 1];
+      if (last && segs[p][0] <= last[1] + 0.05) last[1] = Math.max(last[1], segs[p][1]);
+      else merged.push(segs[p]);
+    }
+    var kept = merged.reduce(function (a, s) { return a + (s[1] - s[0]); }, 0);
+    if (say) say('Analysed audio: ' + merged.length + ' spoken segment(s), '
+                 + kept.toFixed(1) + 's of ' + duration.toFixed(1) + 's kept.');
+    return kept > 0.5 ? merged : null;
+  }
+
+  async function vuEdit(job, sourceName, instruction, say) {
+    if (!window.MediaRecorder) throw new Error('This browser cannot record video. Chrome or Edge works.');
+    var src = await vuGet(job, sourceName);
+    if (!src) throw new Error('source video missing');
+
+    say('Loading ' + sourceName + '…');
+    var url = URL.createObjectURL(src);
+    var v = document.createElement('video');
+    v.src = url; v.playsInline = true; v.preload = 'auto';
+    v.style.cssText = 'position:fixed;left:-9999px;width:2px;height:2px';
+    document.body.appendChild(v);
+    try {
+      await vuOnce(v, 'loadedmetadata');
+      var dur = v.duration;
+      if (!isFinite(dur) || dur <= 0) throw new Error('could not read the video duration');
+
+      var wantsCut = /\b(dead air|pause|umm|filler|tighten|cut|trim|highlight|retake)\b/i.test(instruction);
+      var segs = wantsCut ? await vuSegments(src, dur, say) : null;
+      if (!segs) { segs = [[0, dur]]; if (wantsCut) say('No clear silence found — keeping the full take.'); }
+      if (/caption/i.test(instruction)) {
+        say('⚠ Captions need speech-to-text, which this browser build cannot do — skipped.');
+      }
+
+      var cv = document.createElement('canvas');
+      cv.width = v.videoWidth || 1280; cv.height = v.videoHeight || 720;
+      var c2 = cv.getContext('2d');
+
+      var ac = new (window.AudioContext || window.webkitAudioContext)();
+      var tracks = cv.captureStream(30).getVideoTracks();
+      try {
+        var node = ac.createMediaElementSource(v);
+        var dest = ac.createMediaStreamDestination();
+        node.connect(dest);                       // not to ac.destination:
+        tracks = tracks.concat(dest.stream.getAudioTracks());   // keeps it silent
+      } catch (e) { say('(no audio track captured — video only)'); }
+
+      var rec = new MediaRecorder(new MediaStream(tracks),
+        { mimeType: vMime() || undefined, videoBitsPerSecond: 6000000 });
+      var chunks = [];
+      rec.ondataavailable = function (e) { if (e.data && e.data.size) chunks.push(e.data); };
+
+      var stopped = new Promise(function (res, rej) {
+        rec.onstop = function () { res(); };
+        rec.onerror = function (e) { rej((e && e.error) || new Error('recording failed')); };
+      });
+
+      var drawing = true;
+      (function draw() {
+        if (!drawing) return;
+        try { c2.drawImage(v, 0, 0, cv.width, cv.height); } catch (e) {}
+        requestAnimationFrame(draw);
+      })();
+
+      rec.start();
+      rec.pause();
+      var total = segs.reduce(function (a, s) { return a + (s[1] - s[0]); }, 0), done = 0;
+
+      for (var i = 0; i < segs.length; i++) {
+        v.currentTime = segs[i][0];
+        await vuOnce(v, 'seeked');
+        rec.resume();
+        await v.play();
+        await new Promise(function (res) {
+          (function watch() {
+            if (v.currentTime >= segs[i][1] - 0.01 || v.ended) return res();
+            setTimeout(watch, 40);
+          })();
+        });
+        v.pause();
+        rec.pause();
+        done += segs[i][1] - segs[i][0];
+        say('Cut ' + (i + 1) + '/' + segs.length + ' · '
+            + Math.round((done / total) * 100) + '%');
+      }
+
+      rec.stop();
+      await stopped;
+      drawing = false;
+      try { ac.close(); } catch (e) {}
+
+      var out = new Blob(chunks, { type: vMime() || 'video/webm' });
+      if (!out.size) throw new Error('recorder produced no data');
+      await vuPut(job, 'edit/final.mp4', out);
+      delete VUURLS[job + ' edit/final.mp4'];
+
+      var removed = dur - total;
+      return {
+        bytes: out.size,
+        summary: 'Source: ' + sourceName + ' — ' + dur.toFixed(1) + 's.\n'
+          + 'Kept ' + segs.length + ' segment(s), ' + total.toFixed(1) + 's.\n'
+          + (removed > 0.2 ? 'Removed ' + removed.toFixed(1) + 's of silence.\n' : '')
+          + 'Rendered in your browser — no server involved.'
+          + (/caption/i.test(instruction) ? '\nCaptions skipped: needs speech-to-text.' : '')
+      };
+    } finally {
+      v.pause(); v.remove(); URL.revokeObjectURL(url);
+    }
+  }
+
+  /* <video src> and download links never pass through window.fetch, so the
+     shim cannot answer them. Swap the /api/videouse/file URLs for the blob
+     URLs as they appear in the DOM. */
+  function vuPatchMedia() {
+    var RX = /\/api\/videouse\/file\?job=([^&]+)&path=([^&\s"']+)/;
+    function fix(el, attr) {
+      if (!el || !el.getAttribute) return;
+      var val = el.getAttribute(attr);
+      if (!val) return;
+      var m = RX.exec(val);
+      if (!m) return;
+      vuBlobURL(decodeURIComponent(m[1]), decodeURIComponent(m[2])).then(function (u) {
+        if (u && el.getAttribute(attr) === val) el.setAttribute(attr, u);
+      });
+    }
+    function scan(root) {
+      if (!root || root.nodeType !== 1) return;
+      if (root.tagName === 'VIDEO' || root.tagName === 'SOURCE') fix(root, 'src');
+      if (root.tagName === 'A') fix(root, 'href');
+      if (root.querySelectorAll) {
+        var all = root.querySelectorAll('video[src],source[src],a[href]');
+        for (var i = 0; i < all.length; i++) fix(all[i], all[i].tagName === 'A' ? 'href' : 'src');
+      }
+    }
+    new MutationObserver(function (muts) {
+      for (var i = 0; i < muts.length; i++) {
+        var m = muts[i];
+        if (m.type === 'attributes') fix(m.target, m.attributeName);
+        for (var k = 0; k < m.addedNodes.length; k++) scan(m.addedNodes[k]);
+      }
+    }).observe(document.documentElement, {
+      childList: true, subtree: true, attributes: true, attributeFilter: ['src', 'href']
+    });
+    scan(document.body);
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', vuPatchMedia);
+  else vuPatchMedia();
 
   /* ── canvas renderer backing the routes above ─────────────────────── */
 
