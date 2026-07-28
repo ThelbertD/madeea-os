@@ -48,3 +48,6 @@ member-pack/.claude-flow/
 
 # Local Netlify folder
 .netlify
+
+# Rendered OpenMontage output — regenerated on demand, some are tens of MB
+/public/openmontage/generated/

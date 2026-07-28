@@ -17,7 +17,7 @@ export async function POST(req: Request) {
   try { dir = jobDir(job); } catch { return NextResponse.json({ error: "bad job" }, { status: 400 }); }
   if (jobRunning(dir)) return NextResponse.json({ error: "job already running" }, { status: 409 });
 
-  const pid = spawnEdit(dir, instruction);
+  const pid = await spawnEdit(dir, instruction);
   await writeFile(path.join(dir, "run.pid"), String(pid));
   await writeFile(path.join(dir, "instruction.txt"), instruction.trim());
   return NextResponse.json({ ok: true, pid });

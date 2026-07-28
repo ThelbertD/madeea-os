@@ -14,18 +14,29 @@ import { mkdir, readdir, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { glmcodeSpawnEnv, GLM_CODE_MODEL } from "@/lib/glmcode";
+import { fccSpawnEnv } from "@/lib/fcc";
 
 export const VIDEOUSE_ROOT = path.join(os.homedir(), ".agentic-os", "video-use-jobs");
 
 // launchd starts the dev server with a minimal PATH; make sure `claude`,
 // ffmpeg and uv resolve.
+//
+// Must join with the platform delimiter. Joining with ":" on Windows glued the
+// Unix dirs onto the front of the real PATH — Windows splits on ";", so the
+// whole run-on string became one bogus entry and PATH's first real directory
+// was lost, taking ffmpeg/ffprobe/node with it. The Unix-only prefixes are
+// also skipped on win32, where they can never resolve.
 export const BIN_PATH = [
-  path.join(os.homedir(), ".local/bin"),
-  "/opt/homebrew/bin",
-  "/usr/local/bin",
-  path.join(os.homedir(), ".npm-global/bin"),
+  ...(process.platform === "win32"
+    ? []
+    : [
+        path.join(os.homedir(), ".local/bin"),
+        "/opt/homebrew/bin",
+        "/usr/local/bin",
+        path.join(os.homedir(), ".npm-global/bin"),
+      ]),
   process.env.PATH || "",
-].filter(Boolean).join(":");
+].filter(Boolean).join(path.delimiter);
 
 export function slugify(s: string): string {
   return (s.toLowerCase().replace(/\.[a-z0-9]+$/i, "").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40) || "job");
@@ -96,17 +107,23 @@ export function buildPrompt(instruction: string): string {
 
 // Runner: the standalone `claude` CLI login is flaky (recurring "Not logged
 // in" even while subscriptions are active), so by default we drive Claude
-// Code through the same env override GLM Code uses — the local Ollama
-// Anthropic bridge running glm-5.2:cloud. No login, proven agentic, cheap.
-// Set VIDEOUSE_RUNNER=anthropic to use the CLI's own login instead.
-function runnerEnv(): { env: Record<string, string>; model?: string } {
+// Code through a local Anthropic-speaking bridge instead.
+//
+// This used to point at Ollama's `glm-5.2:cloud`, which has since moved behind
+// a paid plan — every edit died on "API Error: 403 this model requires a
+// subscription". Prefer FCC (Free Claude Code, :8082), falling back to
+// OmniRoute, which is what the rest of the OS already runs on and costs
+// nothing. Set VIDEOUSE_RUNNER=anthropic to use the CLI's own login, or
+// VIDEOUSE_RUNNER=glm to force the old Ollama bridge.
+async function runnerEnv(): Promise<{ env: Record<string, string>; model?: string }> {
   if (process.env.VIDEOUSE_RUNNER === "anthropic") return { env: {} };
-  return { env: glmcodeSpawnEnv(), model: GLM_CODE_MODEL };
+  if (process.env.VIDEOUSE_RUNNER === "glm") return { env: glmcodeSpawnEnv(), model: GLM_CODE_MODEL };
+  return { env: await fccSpawnEnv() };
 }
 
-export function spawnEdit(dir: string, instruction: string): number {
+export async function spawnEdit(dir: string, instruction: string): Promise<number> {
   const logFd = openSync(path.join(dir, "run.log"), "a");
-  const runner = runnerEnv();
+  const runner = await runnerEnv();
   const args = [
     "-p", buildPrompt(instruction),
     "--output-format", "stream-json",

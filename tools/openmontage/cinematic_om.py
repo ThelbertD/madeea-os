@@ -37,19 +37,30 @@ def write_job(path, **fields):
 
 def ask_model(prompt, shots, seconds):
     system = (
+        # This model stops on its own at ~1830 completion tokens (~7KB) no
+        # matter what max_tokens says, so an elaborate composition always got
+        # cut off mid-<style> and was thrown away. Budget for that explicitly:
+        # ask for something small enough to actually finish.
         "You write single-file HTML animations for a 1920x1080 video renderer. "
         "Reply with ONE complete HTML document and nothing else — no prose, no code fences.\n"
         "Hard requirements:\n"
+        "- BREVITY IS CRITICAL: the whole document must be under 4500 characters "
+        "and you MUST finish it with </html>. An unfinished document is worthless. "
+        "Prefer few elements and short CSS over detail; no comments, short class names.\n"
         f"- Exactly {shots} full-screen scenes, shown in sequence over {seconds} seconds total.\n"
+        "- Structure: <!DOCTYPE html><html><head><style>…</style></head><body>…</body></html>.\n"
         "- Drive everything with CSS @keyframes on a fixed timeline; no JS timers, no user input.\n"
         "- Every animation must set animation-fill-mode: both, so any frame can be seeked directly.\n"
-        "- Cinematic look: dark background, slow pans/zooms, generous type, high contrast.\n"
-        "- Self-contained: no external images, fonts, or network requests."
+        "- Use finite animations only — never animation-iteration-count: infinite.\n"
+        "- Build scenes from CSS gradients, shapes and type. No external images, fonts or requests.\n"
+        "- Cinematic look: dark background, slow pans/zooms, generous type, high contrast."
     )
     body = json.dumps({
         "model": MODEL,
         "stream": False,
-        "max_tokens": 8000,
+        # 8000 truncated real compositions mid-<style>, which the renderer then
+        # rejected 45s later with an unrelated-looking error. Give it room.
+        "max_tokens": 16000,
         "messages": [
             {"role": "system", "content": system},
             {"role": "user", "content": f"Cinematic sequence about: {prompt}"},
@@ -68,7 +79,12 @@ def ask_model(prompt, shots, seconds):
     )
     with urllib.request.urlopen(req, timeout=300) as r:
         data = json.load(r)
-    return data["choices"][0]["message"]["content"]
+    choice = data["choices"][0]
+    # "length" means the composition was cut off, not that the model refused —
+    # worth seeing in the log when a run keeps falling back.
+    if choice.get("finish_reason") == "length":
+        print("model hit the token limit — composition truncated", file=sys.stderr)
+    return choice["message"]["content"]
 
 
 def extract_html(text):
@@ -89,12 +105,83 @@ def extract_html(text):
     doc = text[start.start():]
     end = re.search(r"</html\s*>", doc, re.I)
     if end:
-        return doc[: end.end()]
-    if len(doc) < 400:          # too little to be a real composition
+        doc = doc[: end.end()]
+    elif len(doc) < 400:        # too little to be a real composition
         return None
+    # Only a missing *tail* is safe to patch up. A reply cut off inside <style>
+    # leaves the tag unclosed, so the browser swallows the rest of the document
+    # as CSS text: nothing renders, HyperFrames can't infer a duration, and the
+    # render dies 45s later in browser_probe with the misleading "window.__hf
+    # not ready". Appending </body></html> made that look like a valid
+    # composition and silently burned every retry — reject it instead.
+    for tag in ("style", "script"):
+        if len(re.findall(rf"<{tag}\b", doc, re.I)) != len(re.findall(rf"</{tag}\s*>", doc, re.I)):
+            return None
+    if end:
+        return doc
+    if not re.search(r"<body\b", doc, re.I):
+        return None             # never reached the body: nothing would render
     if "</body>" not in doc.lower():
         doc += "</body>"
     return doc + "</html>"
+
+
+HF_SHIM = """
+<script>
+(function () {
+  /* HyperFrames drives the clock itself and refuses to capture until the page
+     exposes window.__hf = { duration, seek }. It can normally infer the root
+     duration from finite CSS animations, but a single `infinite` animation
+     makes it "unknown" — so it falls back to the probe, waits 45s for
+     window.__hf, and dies with "window.__hf not ready after 45000ms".
+     Model-authored compositions use infinite loops constantly, which is why
+     every one of them stalled in browser_probe while the finite-animation
+     fallback rendered fine.
+
+     Asking the model to emit this hook is unreliable, so inject it instead.
+     The Web Animations API makes a pure-CSS page deterministically seekable:
+     pause every animation and set its currentTime. Re-querying inside seek()
+     picks up animations created after load, and a currentTime past the end of
+     an infinite animation wraps to the right iteration on its own. */
+     Note this AUGMENTS window.__hf rather than assigning it. HyperFrames
+     installs its own __hf stub via the page-init hook, which runs after this
+     script and clobbered a plain assignment — the probe kept reporting
+     "__hf=true, seek=false, duration=undefined". Filling in only the missing
+     fields, and re-checking on a short interval, survives that. */
+  var DURATION = __HF_DURATION__;
+  function animations() {
+    try { return document.getAnimations ? document.getAnimations() : []; }
+    catch (e) { return []; }
+  }
+  function seek(t) {
+    var ms = t * 1000;
+    animations().forEach(function (a) {
+      try { a.pause(); a.currentTime = ms; } catch (e) {}
+    });
+  }
+  function install() {
+    var hf = window.__hf || (window.__hf = {});
+    if (typeof hf.seek !== "function") hf.seek = seek;
+    if (typeof hf.duration !== "number") hf.duration = DURATION;
+  }
+  install();
+  setInterval(install, 50);
+  document.addEventListener("DOMContentLoaded", function () { install(); seek(0); });
+})();
+</script>
+"""
+
+
+def with_hf_shim(html, seconds):
+    """Give the composition a seek API unless it already defines one."""
+    if "window.__hf" in html:
+        return html
+    shim = HF_SHIM.replace("__HF_DURATION__", str(seconds))
+    lower = html.lower()
+    i = lower.rfind("</body>")
+    if i == -1:
+        i = lower.rfind("</html>")
+    return html[:i] + shim + html[i:] if i != -1 else html + shim
 
 
 def fallback_html(prompt, seconds):
@@ -160,7 +247,7 @@ def main():
 
         proj = Path(a.job).parent.parent / "projects" / out.stem
         proj.mkdir(parents=True, exist_ok=True)
-        (proj / "index.html").write_text(html, encoding="utf-8")
+        (proj / "index.html").write_text(with_hf_shim(html, seconds), encoding="utf-8")
         (proj / "hyperframes.json").write_text(json.dumps({
             "name": out.stem, "composition": "index.html",
             "width": 1920, "height": 1080, "fps": FPS, "duration": seconds,
