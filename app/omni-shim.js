@@ -361,8 +361,308 @@
 
     'opendesign/projects': async function () { return json({ projects: [], items: [] }); },
 
-    'version': async function () { return json({ version: '2026-07-21' }); }
+    'version': async function () { return json({ version: '2026-07-21' }); },
+
+    /* ── Video, rendered in the browser ────────────────────────────────
+       On Vercel there is no server, so "Create + render" had nothing to
+       call and the tab just said "Init failed". The real pipeline needs
+       ffmpeg, headless Chrome, HyperFrames and a model gateway — none of
+       which a static host can provide.
+
+       So render here instead: draw the composition onto a canvas and
+       capture it with MediaRecorder. That is a genuine MP4/WebM the user
+       can play and download, produced with nothing running anywhere else.
+       Trade-off: these are motion title cards, not the multi-scene
+       compositions the local pipeline writes. Capture is real-time, so a
+       12s video takes 12s (the local renderer takes ~2 minutes). */
+
+    'video/hyperframes/init': async function (req) {
+      var b = await req.json().catch(function () { return {}; });
+      var prompt = String(b.prompt || '').trim();
+      if (!prompt) return json({ ok: false, error: 'Describe the video first.' }, 400);
+      if (!window.MediaRecorder || !HTMLCanvasElement.prototype.captureStream) {
+        return json({ ok: false, error: 'This browser cannot record video. Chrome or Edge works.' }, 501);
+      }
+      var slug = vSlug(prompt), list = vProjects();
+      var dur = Math.max(8, Math.min(20, Math.ceil(prompt.split(/\s+/).length / 3) + 7));
+      if (!list.some(function (p) { return p.slug === slug; })) {
+        list.unshift({ slug: slug, prompt: prompt, cwd: '(browser)', hasIndex: true,
+                       renderCount: 0, mtime: Date.now(), duration: dur });
+        vSaveProjects(list);
+      }
+      return json({ ok: true, slug: slug, authored: true, duration: dur, assets: [], cwd: '(browser)' });
+    },
+
+    // Must be declared before the bare render route: lookup tries an exact
+    // key first, but the prefix fallback would otherwise swallow /status.
+    'video/hyperframes/render/status': async function (req, url) {
+      var id = url.searchParams.get('id');
+      if (id) return json({ job: VJOBS[id] || null });
+      var all = Object.keys(VJOBS).map(function (k) { return VJOBS[k]; });
+      return json({ jobs: all, job: all[all.length - 1] || null });
+    },
+
+    'video/hyperframes/render': async function (req) {
+      var b = await req.json().catch(function () { return {}; });
+      var slug = String(b.slug || '');
+      var proj = vProjects().filter(function (p) { return p.slug === slug; })[0];
+      if (!proj) return json({ ok: false, error: 'project not found' }, 404);
+
+      var id = 'rj_' + Date.now().toString(36);
+      var job = { id: id, projectSlug: slug, status: 'rendering', createdAt: Date.now(),
+                  startedAt: Date.now(), lastOutput: 'Recording 0%' };
+      VJOBS[id] = job;
+
+      // Deliberately not awaited: the UI polls render/status, exactly as it
+      // does against the real server.
+      vRender(proj.prompt, proj.duration || 12, function (pct) {
+        job.lastOutput = 'Recording ' + pct + '%';
+      }).then(function (blob) {
+        return vPutVideo(slug, blob).then(function () {
+          job.status = 'completed'; job.exitCode = 0; job.finishedAt = Date.now();
+          job.lastOutput = (blob.size / 1048576).toFixed(1) + ' MB · '
+                         + (proj.duration || 12) + '.0s · rendered in your browser';
+          var l = vProjects();
+          l.forEach(function (p) {
+            if (p.slug === slug) { p.renderCount = (p.renderCount || 0) + 1; p.mtime = Date.now(); }
+          });
+          vSaveProjects(l);
+        });
+      }).catch(function (e) {
+        job.status = 'failed'; job.exitCode = 1; job.finishedAt = Date.now();
+        job.lastOutput = String((e && e.message) || e);
+      });
+
+      return json({ ok: true, job: job });
+    },
+
+    'video/hyperframes/projects': async function () {
+      var list = vProjects(), out = [];
+      for (var i = 0; i < list.length; i++) {
+        var p = list[i];
+        var rec = { slug: p.slug, cwd: p.cwd || '(browser)', hasIndex: true, prompt: p.prompt,
+                    renderCount: p.renderCount || 0, mtime: p.mtime };
+        var url = await vVideoURL(p.slug);
+        if (url.url) rec.lastRender = { url: url.url, bytes: url.bytes, mtime: p.mtime };
+        out.push(rec);
+      }
+      return json({ count: out.length, projects: out });
+    },
+
+    'openmontage/generate': async function (req) {
+      var b = await req.json().catch(function () { return {}; });
+      var prompt = String(b.prompt || '').trim();
+      if (!prompt) return json({ error: 'Describe the video first.' }, 400);
+      if (!window.MediaRecorder || !HTMLCanvasElement.prototype.captureStream) {
+        return json({ error: 'This browser cannot record video. Chrome or Edge works.' }, 501);
+      }
+      var shots = Math.max(1, Math.min(6, Number(b.shots) || 3));
+      var seconds = Math.max(8, shots * 4);
+      var id = 'om-' + Date.now().toString(36);
+      OMJOBS[id] = { status: 'rendering', progress: 5, message: 'Recording…',
+                     title: prompt.slice(0, 60) };
+      vRender(prompt, seconds, function (pct) {
+        OMJOBS[id].progress = Math.max(5, pct);
+      }).then(function (blob) {
+        return vPutVideo(id, blob).then(function () {
+          return vVideoURL(id).then(function (u) {
+            OMJOBS[id] = { status: 'done', progress: 100, message: 'Done',
+                           title: prompt.slice(0, 60), video: id + '.webm', videoUrl: u.url };
+          });
+        });
+      }).catch(function (e) {
+        OMJOBS[id] = { status: 'error', progress: 0, title: prompt.slice(0, 60),
+                       message: String((e && e.message) || e) };
+      });
+      return json({ jobId: id, status: 'planning' });
+    },
+
+    'openmontage/status': async function (req, url) {
+      var id = url.searchParams.get('id') || url.searchParams.get('jobId') || '';
+      var j = OMJOBS[id];
+      if (!j) return json({ error: 'bad id' }, 400);
+      return json(j);
+    }
   };
+
+  /* ── canvas renderer backing the routes above ─────────────────────── */
+
+  var VJOBS = {};                 // render jobs, this page-load only
+  var OMJOBS = {};
+  var VURLS = {};                 // slug → { url, bytes }, so we mint one
+                                  // object URL per video instead of leaking
+                                  // a new one on every projects poll.
+
+  function vSlug(s) {
+    return s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 50) || 'project';
+  }
+  function vProjects() { return store.get('hfProjects', []); }
+  function vSaveProjects(v) { store.set('hfProjects', v); }
+
+  // Videos go in IndexedDB, not localStorage — they are megabytes of binary
+  // and survive a reload, so the Projects list still plays after refresh.
+  function vDB(fn) {
+    return new Promise(function (resolve, reject) {
+      var rq = indexedDB.open('madeea-videos', 1);
+      rq.onupgradeneeded = function () { rq.result.createObjectStore('videos'); };
+      rq.onerror = function () { reject(rq.error); };
+      rq.onsuccess = function () { fn(rq.result, resolve, reject); };
+    });
+  }
+  function vPutVideo(key, blob) {
+    if (VURLS[key]) { try { URL.revokeObjectURL(VURLS[key].url); } catch (e) {} delete VURLS[key]; }
+    return vDB(function (db, resolve, reject) {
+      var tx = db.transaction('videos', 'readwrite');
+      tx.objectStore('videos').put(blob, key);
+      tx.oncomplete = function () { resolve(true); };
+      tx.onerror = function () { reject(tx.error); };
+    }).catch(function () { VURLS[key] = { url: URL.createObjectURL(blob), bytes: blob.size }; });
+  }
+  async function vVideoURL(key) {
+    if (VURLS[key]) return VURLS[key];
+    var blob = await vDB(function (db, resolve) {
+      var rq = db.transaction('videos', 'readonly').objectStore('videos').get(key);
+      rq.onsuccess = function () { resolve(rq.result || null); };
+      rq.onerror = function () { resolve(null); };
+    }).catch(function () { return null; });
+    if (!blob) return {};
+    VURLS[key] = { url: URL.createObjectURL(blob), bytes: blob.size };
+    return VURLS[key];
+  }
+
+  function vMime() {
+    var c = ['video/mp4;codecs=avc1.42E01E', 'video/mp4',
+             'video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'];
+    for (var i = 0; i < c.length; i++) {
+      if (window.MediaRecorder && MediaRecorder.isTypeSupported(c[i])) return c[i];
+    }
+    return '';
+  }
+
+  function vWrap(ctx, text, maxW) {
+    var words = String(text).split(/\s+/), lines = [], line = '';
+    for (var i = 0; i < words.length; i++) {
+      var probe = line ? line + ' ' + words[i] : words[i];
+      if (ctx.measureText(probe).width > maxW && line) { lines.push(line); line = words[i]; }
+      else line = probe;
+    }
+    if (line) lines.push(line);
+    return lines.slice(0, 4);
+  }
+
+  function vFrame(ctx, W, H, t, dur, title, stars) {
+    var p = Math.min(1, Math.max(0, t / dur));
+    var ease = 1 - Math.pow(1 - Math.min(1, t / 1.6), 3);   // title entrance
+
+    var g = ctx.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, '#09141f'); g.addColorStop(0.55, '#0e1f2f'); g.addColorStop(1, '#15293b');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+
+    // slow drifting warm glow
+    var gx = W * (0.5 + 0.16 * Math.sin(p * Math.PI * 0.9));
+    var gy = H * (0.42 + 0.08 * Math.cos(p * Math.PI * 0.7));
+    var rg = ctx.createRadialGradient(gx, gy, 0, gx, gy, H * 0.85);
+    rg.addColorStop(0, 'rgba(253,88,18,0.20)');
+    rg.addColorStop(0.5, 'rgba(253,88,18,0.05)');
+    rg.addColorStop(1, 'rgba(253,88,18,0)');
+    ctx.fillStyle = rg; ctx.fillRect(0, 0, W, H);
+
+    for (var i = 0; i < stars.length; i++) {
+      var s = stars[i];
+      var y = (s.y + p * s.sp * H) % (H + 40) - 20;
+      ctx.globalAlpha = s.a * (0.45 + 0.55 * Math.sin((p * 6 + s.ph) * Math.PI));
+      ctx.fillStyle = s.warm ? '#ff7a42' : '#f4f4f5';
+      ctx.beginPath(); ctx.arc(s.x, y, s.r, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+
+    ctx.save();
+    var zoom = 1 + 0.06 * p;                       // slow push-in
+    ctx.translate(W / 2, H / 2); ctx.scale(zoom, zoom); ctx.translate(-W / 2, -H / 2);
+
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.font = '600 92px Georgia, "Times New Roman", serif';
+    var lines = vWrap(ctx, title, W * 0.74);
+    var lh = 116, top = H / 2 - ((lines.length - 1) * lh) / 2 - 30;
+
+    ctx.shadowColor = 'rgba(0,0,0,0.55)'; ctx.shadowBlur = 26; ctx.shadowOffsetY = 6;
+    for (var k = 0; k < lines.length; k++) {
+      var le = 1 - Math.pow(1 - Math.min(1, Math.max(0, (t - k * 0.18) / 1.6)), 3);
+      ctx.globalAlpha = le;
+      ctx.fillStyle = '#f4f4f5';
+      ctx.fillText(lines[k], W / 2, top + k * lh + (1 - le) * 34);
+    }
+    ctx.shadowBlur = 0; ctx.shadowOffsetY = 0; ctx.globalAlpha = 1;
+
+    var rw = 900 * ease * (0.75 + 0.25 * p);
+    var ry = top + (lines.length - 1) * lh + 104;
+    var lg = ctx.createLinearGradient(W / 2 - rw / 2, 0, W / 2 + rw / 2, 0);
+    lg.addColorStop(0, 'rgba(253,88,18,0)');
+    lg.addColorStop(0.5, '#fd5812');
+    lg.addColorStop(1, 'rgba(253,88,18,0)');
+    ctx.fillStyle = lg; ctx.fillRect(W / 2 - rw / 2, ry, rw, 5);
+    ctx.restore();
+
+    // vignette + wordmark
+    var vg = ctx.createRadialGradient(W / 2, H / 2, H * 0.35, W / 2, H / 2, H * 0.92);
+    vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(0,0,0,0.55)');
+    ctx.fillStyle = vg; ctx.fillRect(0, 0, W, H);
+
+    ctx.globalAlpha = 0.5 * ease;
+    ctx.font = '500 30px Georgia, serif'; ctx.fillStyle = '#f4f4f5';
+    ctx.fillText('MadeEA OS', W / 2, H - 78);
+    ctx.globalAlpha = 1;
+  }
+
+  function vRender(title, seconds, onProgress) {
+    return new Promise(function (resolve, reject) {
+      if (!window.MediaRecorder) return reject(new Error('MediaRecorder unavailable — try Chrome or Edge.'));
+      var W = 1920, H = 1080, FPS = 30;
+      var cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+      var ctx = cv.getContext('2d');
+      if (!cv.captureStream) return reject(new Error('canvas.captureStream unavailable — try Chrome or Edge.'));
+
+      var stars = [];
+      for (var i = 0; i < 90; i++) {
+        stars.push({ x: Math.random() * W, y: Math.random() * H, r: Math.random() * 2.4 + 0.6,
+                     a: Math.random() * 0.5 + 0.2, sp: Math.random() * 0.35 + 0.06,
+                     ph: Math.random() * 2, warm: Math.random() < 0.22 });
+      }
+
+      var mime = vMime();
+      var rec;
+      try {
+        rec = new MediaRecorder(cv.captureStream(FPS),
+          mime ? { mimeType: mime, videoBitsPerSecond: 6000000 } : undefined);
+      } catch (e) { return reject(new Error('Could not start the recorder: ' + e.message)); }
+
+      var chunks = [];
+      rec.ondataavailable = function (e) { if (e.data && e.data.size) chunks.push(e.data); };
+      rec.onerror = function (e) { reject((e && e.error) || new Error('recording failed')); };
+      rec.onstop = function () {
+        var blob = new Blob(chunks, { type: mime || 'video/webm' });
+        if (!blob.size) return reject(new Error('recorder produced no data'));
+        resolve(blob);
+      };
+
+      vFrame(ctx, W, H, 0, seconds, title, stars);
+      rec.start();
+      var t0 = performance.now(), last = -1;
+      (function loop() {
+        var t = (performance.now() - t0) / 1000;
+        if (t >= seconds) {
+          vFrame(ctx, W, H, seconds, seconds, title, stars);
+          // Let the last frame reach the stream before closing the recorder.
+          setTimeout(function () { try { rec.stop(); } catch (e) { reject(e); } }, 120);
+          return;
+        }
+        vFrame(ctx, W, H, t, seconds, title, stars);
+        var pct = Math.round((t / seconds) * 100);
+        if (onProgress && pct !== last) { last = pct; onProgress(pct); }
+        requestAnimationFrame(loop);
+      })();
+    });
+  }
 
   /* Pages fetch dozens of endpoints that need a real server. A 404 — or a
      payload of the wrong shape — takes the whole React tree down: Mission
