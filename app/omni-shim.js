@@ -415,7 +415,7 @@
 
       // Deliberately not awaited: the UI polls render/status, exactly as it
       // does against the real server.
-      vRender(proj.prompt, proj.duration || 12, function (pct) {
+      vRender(vTitle(proj.prompt), proj.duration || 12, function (pct) {
         job.lastOutput = 'Recording ' + pct + '%';
       }).then(function (blob) {
         return vPutVideo(slug, blob).then(function () {
@@ -461,7 +461,7 @@
       var id = 'om-' + Date.now().toString(36);
       OMJOBS[id] = { status: 'rendering', progress: 5, message: 'Recording…',
                      title: prompt.slice(0, 60) };
-      vRender(prompt, seconds, function (pct) {
+      vRender(vTitle(prompt), seconds, function (pct) {
         OMJOBS[id].progress = Math.max(5, pct);
       }).then(function (blob) {
         return vPutVideo(id, blob).then(function () {
@@ -495,6 +495,29 @@
 
   function vSlug(s) {
     return s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 50) || 'project';
+  }
+
+  /* Locally a model reads the prompt and decides what the card should say, so
+     "a bold title card that reads MadeEA OS, dark navy background" becomes a
+     short headline. There is no model here, so pull the headline out of the
+     prompt instead — otherwise the whole descriptive sentence gets painted on
+     screen, which looks nothing like the local render. */
+  function vTitle(prompt) {
+    var s = String(prompt || '').trim();
+    var quoted = s.match(/["“”'‘’]([^"“”'‘’]{2,60})["“”'‘’]/);
+    if (quoted) return quoted[1].trim();
+    var says = s.match(/\b(?:that\s+)?(?:reads|says|titled|title:|text:)\s+(.+)/i);
+    if (says) s = says[1];
+    s = s.split(/\s*[,;—–]\s*|\s+\bwith\b\s+|\s+\bon\b\s+(?=a\b|dark\b|light\b)/i)[0];
+    s = s.replace(/\b(\d+[\-\s]?second|cinematic|intro|animation|video|clip|title\s+card|card)\b/gi, ' ')
+         .replace(/\s{2,}/g, ' ').trim()
+         .replace(/^(?:(?:a|an|the|for|of|about|showing)\s+)+/i, '')
+         .trim();
+    if (!s || s.length < 2) s = String(prompt || '').trim();
+    // Leading word is usually mid-sentence after the trimming above; a capital
+    // reads as a title rather than a fragment.
+    if (!/^[A-Z0-9]/.test(s)) s = s.charAt(0).toUpperCase() + s.slice(1);
+    return s.slice(0, 70);
   }
   function vProjects() { return store.get('hfProjects', []); }
   function vSaveProjects(v) { store.set('hfProjects', v); }
