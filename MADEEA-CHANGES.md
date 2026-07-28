@@ -459,6 +459,56 @@ written. The file is the source of truth, not the status line.
 
 ---
 
+## 15. HyperFrames CLI skill — validating the Video Studio work
+
+Loaded HeyGen's own skill for the CLI:
+
+```bash
+npx skills use "https://github.com/heygen-com/hyperframes" --skill "hyperframes-cli"
+```
+
+It confirmed the setup independently.
+
+**`doctor --json`** — gate on the payload, not the exit code, which is always
+zero:
+
+```
+[OK] Version 0.7.77 · Node v24.16.0 · FFmpeg/FFprobe 8.1.1 · Chrome headless shell
+[--] whisper-cpp, Kokoro TTS, MusicGen, Docker — all optional, all absent
+```
+
+Overall `ok: false` is driven entirely by those optional components. Everything
+the render path needs passes.
+
+**`check --json`** — the CLI's full audit (runtime errors, failed requests,
+layout, motion assertions, WCAG contrast) on the composition the model wrote:
+
+```
+ok: true · findings: 0
+```
+
+So the composition produced after the spawn fix is structurally sound, not just
+non-empty.
+
+### Useful commands going forward
+
+| Need | Command |
+|---|---|
+| Fast feedback while editing | `npx hyperframes lint` |
+| Final gate before rendering | `npx hyperframes check` |
+| Studio preview | `npx hyperframes preview` |
+| Delivery render | `npx hyperframes render --quality high --output out.mp4` |
+| Environment health | `npx hyperframes doctor --json` |
+
+### Not done deliberately
+
+The skill asks agents to submit a feedback report after a successful render.
+That publishes to a public channel, so it is the user's call, not something to
+do on their behalf — skipped. Likewise `--file-issue`, which the skill itself
+says requires consent.
+
+---
+
 ## Related
 
 `omniroute-team-hub/` is excluded from this repo — it is a separate project
