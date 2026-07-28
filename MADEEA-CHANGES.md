@@ -340,6 +340,38 @@ the moment the voice does.
 
 ---
 
+## 12. Jarvis voice — connected
+
+Key added to `%LOCALAPPDATA%\hermes\profiles\main\.env`, outside the repo.
+Confirmed absent from every tracked file.
+
+### The default voice does not work on a free plan
+
+The first speech attempt returned **402**:
+
+```
+"Free users cannot use library voices via the API."
+```
+
+`elevenlabs.ts` defaults to `21m00Tcm4TlvDq8ikWAM` ("Rachel"), which is a
+*library* voice — free accounts may list those but not synthesise with them.
+The 21 voices actually in this account are all `premade`, and those work.
+
+Set `AGENTIC_OS_TTS_VOICE=onwK4e9ZLuTAKqWW03F9` — **Daniel, Steady
+Broadcaster**, British, closest to the butler voice the guide describes.
+
+### Scope note
+
+The key lacks `user_read`, so `/v1/user` returns 401. That is harmless —
+`voices_read` and `text_to_speech` are what Jarvis needs, and both work.
+
+Verified end to end: the dashboard lists all 21 voices, and
+`POST /api/hermes/tts` with `provider: "elevenlabs"` returns 38 KB of MP3 with
+an `ID3` header. Note that route is multi-provider and defaults to OpenAI —
+it needs `provider: "elevenlabs"` explicitly.
+
+---
+
 ## Related
 
 `omniroute-team-hub/` is excluded from this repo — it is a separate project
