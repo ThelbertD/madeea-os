@@ -4,7 +4,7 @@ import { writeFile, mkdir, readdir, stat, copyFile } from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
 import { createProject } from "@/lib/videoProjects";
-import { CLAUDE_MODEL } from "@/lib/config";
+import { CLAUDE_MODEL, config } from "@/lib/config";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -268,8 +268,14 @@ ${assets.length ? assets.map((a) => `  - assets/${a}`).join("\n") : "  (none —
 
 function runClaude(system: string, prompt: string, cwd: string, timeoutMs: number): Promise<string> {
   return new Promise((resolve) => {
-    const child = spawn("claude", ["-p", "--model", CLAUDE_MODEL, "--append-system-prompt", system, prompt],
-      { cwd, env: { ...process.env }, stdio: ["ignore", "pipe", "pipe"] });
+    // Spawn the resolved binary, not the bare name. On Windows "claude" on
+    // PATH is an extensionless shim that Node cannot spawn — it throws
+    // EINVAL, which the error handler below swallows, so the route reported
+    // "no html in model output" as though the model had simply failed.
+    const bin = config.claude ?? "claude";
+    const child = spawn(bin, ["-p", "--model", CLAUDE_MODEL, "--append-system-prompt", system, prompt],
+      { cwd, env: { ...process.env }, stdio: ["ignore", "pipe", "pipe"],
+        shell: process.platform === "win32" && !/\.exe$/i.test(bin) });
     let out = "";
     const timer = setTimeout(() => { try { child.kill("SIGKILL"); } catch {} resolve(out); }, timeoutMs);
     child.stdout.on("data", (d) => { out += String(d); });

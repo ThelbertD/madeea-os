@@ -17,7 +17,23 @@ export const dynamic = "force-dynamic";
 // Spawns `hyperframes render --output <out>` in the background, streams log,
 // returns the job id. Poll /api/video/hyperframes/render/status?id=<id>.
 
-const HYPERFRAMES_BIN = path.join(os.homedir(), "local", "node", "bin", "hyperframes");
+// The original hard-coded ~/local/node/bin/hyperframes — a Unix path that
+// does not exist on Windows, and nothing auto-downloads it despite what
+// install/12 says. hyperframes is on npm, so look where npm -g actually puts
+// it, then fall back to the original location.
+const HYPERFRAMES_CANDIDATES = [
+  process.env.HYPERFRAMES_BIN,
+  // Prefer the package's own entry script: spawning it with node needs no
+  // shell, so the long-running render is not sitting behind a cmd.exe wrapper
+  // (which buffered its pipes and left the job stuck at "rendering" forever,
+  // even though the same command finished fine from a terminal).
+  process.platform === "win32"
+    ? path.join(process.env.APPDATA ?? "", "npm", "node_modules", "hyperframes", "bin", "hyperframes.mjs")
+    : null,
+  path.join(os.homedir(), "local", "node", "bin", "hyperframes"),
+].filter(Boolean) as string[];
+
+const HYPERFRAMES_BIN = HYPERFRAMES_CANDIDATES.find((p) => existsSync(p)) ?? HYPERFRAMES_CANDIDATES[HYPERFRAMES_CANDIDATES.length - 1];
 
 export async function POST(req: Request) {
   const body = await req.json().catch(() => ({}));
@@ -50,7 +66,11 @@ export async function POST(req: Request) {
   // hyperframes render [DIR] --output <path>
   // The first arg is the project DIRECTORY (default index.html composition).
   // Quiet flag = less spammy logs; --workers=2 caps RAM for safety.
-  const child = spawn(HYPERFRAMES_BIN, [
+  // A .mjs entry runs through node; anything else is executed directly.
+  const isScript = /\.mjs$/i.test(HYPERFRAMES_BIN);
+  const cmd = isScript ? process.execPath : HYPERFRAMES_BIN;
+  const child = spawn(cmd, [
+    ...(isScript ? [HYPERFRAMES_BIN] : []),
     "render",
     cwd,
     "--output", outputPath,
@@ -59,12 +79,13 @@ export async function POST(req: Request) {
     cwd,
     env: {
       ...process.env,
-      PATH: (process.env.PATH ?? "") + ":/opt/homebrew/bin:/usr/local/bin",
+      PATH: (process.env.PATH ?? "") + (process.platform === "win32" ? "" : ":/opt/homebrew/bin:/usr/local/bin"),
       HOME: process.env.HOME ?? "",
       NO_COLOR: "1",
     },
     detached: true,
     stdio: ["ignore", "pipe", "pipe"],
+    shell: false,
   });
 
   child.stdout.on("data", (b: Buffer) => {

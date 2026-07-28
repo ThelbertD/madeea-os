@@ -1,3 +1,4 @@
+import { config } from "@/lib/config";
 // Video Editor (video-use) — the browser-use/video-use skill driven by the
 // real Claude Code CLI, per job folder. Upload a video into a job dir, spawn
 // `claude -p` there with an edit brief; the video-use skill (symlinked at
@@ -113,7 +114,7 @@ export function spawnEdit(dir: string, instruction: string): number {
     "--permission-mode", "bypassPermissions",
   ];
   if (runner.model) args.push("--model", runner.model);
-  const child = spawn("claude", args, {
+  const child = spawn(config.claude ?? "claude", args, {
     cwd: dir,
     env: { ...process.env, ...runner.env, PATH: BIN_PATH },
     detached: true,

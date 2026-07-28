@@ -147,7 +147,7 @@ export async function POST(req: Request) {
           "--model", engine === "kimik3" ? KIMI_K3_MODEL : GLM_CODE_MODEL,
         ];
         const spawnEnv = engine === "kimik3" ? kimik3SpawnEnv() : glmcodeSpawnEnv();
-        child = spawn("claude", args, { cwd, env: { ...process.env, ...spawnEnv, PATH: BIN_PATH } });
+        child = spawn(config.claude ?? "claude", args, { cwd, env: { ...process.env, ...spawnEnv, PATH: BIN_PATH } });
         try { child.stdin?.end(); } catch {}
         handleLine = (line: string) => {
           if (!line.trim()) return;

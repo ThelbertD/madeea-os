@@ -414,6 +414,51 @@ its 21 voices.
 
 ---
 
+## 14. Video Studio (install/12)
+
+ffmpeg **and** ffprobe 8.1.1 were already present, so part A's only real
+prerequisite was met. Parts A and C now work; part B needs a HeyGen key, and
+`~/.agentic-os/heygen.env` is created with a commented placeholder.
+
+### The composition was never being written
+
+The first attempt returned `authored: false` — *"no html in model output"*,
+which reads like the model failing. It was not. `hyperframes/init` authors the
+composition with a raw `spawn("claude", …)`, using the **bare name**, which on
+Windows resolves to an extensionless PATH shim that Node cannot spawn. It
+throws EINVAL, `child.on("error")` swallows it, and the route resolves with an
+empty string.
+
+Two other files did the same: `glm-code/build` and `lib/videouse.ts`. All three
+now spawn `config.claude`, the resolved `.exe`.
+
+Result: `authored: true`, an 11 KB multi-scene `index.html` with a 6.9 KB
+`fx.js`, and a 31-second composition instead of the 5-second fallback.
+
+### HyperFrames does not auto-install
+
+Contrary to the guide's *"the first render downloads the tool automatically"*,
+`HYPERFRAMES_BIN` was hard-coded to `~/local/node/bin/hyperframes` — a Unix
+path, with no download step. It is on npm, so:
+
+```bash
+npm install -g hyperframes      # 0.7.77
+```
+
+The route now checks `HYPERFRAMES_BIN`, then the npm location, then the
+original path. It spawns the package's `.mjs` entry with node rather than the
+`.cmd` shim, so the long render is not sitting behind a `cmd.exe` wrapper.
+
+### Verified
+
+A real render: **7.35 MB, 31.0s, 930 frames**, and the Workspace lists it under
+Finished Videos.
+
+One rough edge: the job's status can stay `"rendering"` after the MP4 has been
+written. The file is the source of truth, not the status line.
+
+---
+
 ## Related
 
 `omniroute-team-hub/` is excluded from this repo — it is a separate project
