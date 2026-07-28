@@ -562,8 +562,127 @@
       var blob = await vuGet(job, rel);
       if (!blob) return json({ error: 'not found' }, 404);
       return new Response(blob, { headers: { 'Content-Type': blob.type || 'video/mp4' } });
+    },
+
+    /* ── Memory, from a published vault snapshot ───────────────────────
+       The Obsidian vault lives on the author's machine, so the graph came
+       back empty here and the galaxy showed 0 stars. memory-snapshot.json
+       is generated from the local vault and shipped with the build, which
+       is what makes the tab work with no server.
+
+       Note this publishes the vault's contents to whoever can reach the
+       site — done deliberately, at the owner's request. */
+
+    'memory/graph': async function () {
+      var s = await memSnap();
+      return json(s ? s.graph : { nodes: [], links: [] });
+    },
+
+    'memory/recent': async function () {
+      var s = await memSnap();
+      return json({ recent: (s && s.recent) || [] });
+    },
+
+    'memory/omi': async function (req, url) {
+      var s = await memSnap();
+      var q = (url.searchParams.get('q') || '').toLowerCase();
+      var items = (s && s.omi) || [];
+      if (q) items = items.filter(function (t) { return String(t).toLowerCase().indexOf(q) >= 0; });
+      return json({ q: url.searchParams.get('q') || '', items: items, total: items.length });
+    },
+
+    'memory/search': async function (req, url) {
+      var s = await memSnap();
+      var q = (url.searchParams.get('q') || '').trim().toLowerCase();
+      if (!s || !q) return json({ q: q, notes: [] });
+      var out = [];
+      Object.keys(s.notes).forEach(function (path) {
+        var n = s.notes[path], hay = (n.title + ' ' + n.content).toLowerCase();
+        var at = hay.indexOf(q);
+        if (at < 0) return;
+        var body = n.content.replace(/\s+/g, ' ');
+        var i = body.toLowerCase().indexOf(q);
+        out.push({
+          path: path, title: n.title, mtime: n.mtime,
+          preview: (i < 0 ? body.slice(0, 220) : body.slice(Math.max(0, i - 70), i + 150)).trim()
+        });
+      });
+      out.sort(function (a, b) { return b.mtime - a.mtime; });
+      return json({ q: url.searchParams.get('q') || '', notes: out.slice(0, 60) });
+    },
+
+    'memory/note': async function (req, url) {
+      var s = await memSnap();
+      var p = url.searchParams.get('path') || '';
+      var n = s && s.notes[p];
+      if (!n) return json({ error: 'not found', path: p, content: '' }, 404);
+      return json({ path: p, content: n.content, title: n.title, mtime: n.mtime });
     }
   };
+
+  /* ── memory snapshot ──────────────────────────────────────────────── */
+
+  var MEMSNAP = null;
+  function memBase() {
+    // Derive the deployed base from this script's own URL, so it works under
+    // /madeea-os/app on Pages and at whatever path Vercel rewrites to.
+    try {
+      var el = document.querySelector('script[src*="omni-shim.js"]');
+      if (el) return el.src.replace(/\/omni-shim\.js.*$/, '');
+    } catch (e) {}
+    return '';
+  }
+  function memSnap() {
+    if (MEMSNAP) return MEMSNAP;
+    MEMSNAP = nativeFetch(memBase() + '/memory-snapshot.json', { cache: 'force-cache' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .catch(function () { return null; });
+    return MEMSNAP;
+  }
+
+  /* The pack ships "1261 omi · 186 notes" as literal text in three places —
+     the original author's numbers, not this vault's. Correct them once the
+     real snapshot is known, rather than leaving a figure that is simply
+     wrong. */
+  function memPatchCounts() {
+    memSnap().then(function (s) {
+      if (!s) return;
+      var notes = Object.keys(s.notes).length, omi = (s.omi || []).length;
+      var subs = [
+        [/1261 omi · 186 notes/g, omi + ' omi · ' + notes + ' notes'],
+        [/Search 1261 memories \+ 186 notes…/g, 'Search ' + notes + ' notes…'],
+        [/Search 1261 Omi memories \+ your Obsidian vault\./g, 'Search ' + notes + ' notes from the Obsidian vault.']
+      ];
+      function walk() {
+        var it = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT), n;
+        while ((n = it.nextNode())) {
+          for (var i = 0; i < subs.length; i++) {
+            if (subs[i][0].test(n.nodeValue)) {
+              n.nodeValue = n.nodeValue.replace(subs[i][0], subs[i][1]);
+            }
+          }
+        }
+        document.querySelectorAll('input[placeholder]').forEach(function (el) {
+          for (var i = 0; i < subs.length; i++) {
+            var v = el.getAttribute('placeholder');
+            if (v && subs[i][0].test(v)) el.setAttribute('placeholder', v.replace(subs[i][0], subs[i][1]));
+          }
+        });
+      }
+      walk();
+      var t = null;
+      new MutationObserver(function () { clearTimeout(t); t = setTimeout(walk, 60); })
+        .observe(document.body, { childList: true, subtree: true, characterData: true });
+    });
+  }
+  // Must not run before React finishes hydrating: rewriting text nodes mid-
+  // hydration makes the client markup disagree with the server's and throws
+  // React #418, which blanks the tree. Wait for load, then a beat more.
+  (function schedulePatch() {
+    var go = function () { setTimeout(memPatchCounts, 1500); };
+    if (document.readyState === 'complete') go();
+    else window.addEventListener('load', go, { once: true });
+  })();
 
   /* ── Video Editor engine ──────────────────────────────────────────── */
 
