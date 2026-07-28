@@ -263,6 +263,45 @@ both 200, and `memory/recent` lists the new notes.
 
 ---
 
+## 10. Voice Building / Agent Factory (install/2)
+
+Ollama was already installed but had no model, so the Factory fell back to a
+model that was not pulled and produced no file.
+
+Pulled `gemma2` (5.4 GB). The guide offers `qwen2.5-coder:14b` for machines
+with 16 GB+; this one has **13.9 GB**, so `gemma2` is the correct choice.
+
+### The config conflict, and how it resolves
+
+Step 3 says to write `MODEL="ollama/gemma2"` into `~/.fcc/.env` — the same file
+install/5 uses for the Free Claude Code chat. Setting it naively would drag the
+chat onto a small local model, which is exactly what install/0's one rule
+forbids.
+
+They coexist because the two consumers read different keys:
+
+| Consumer | Reads | Now |
+|---|---|---|
+| Agent Factory | `MODEL`, and **only if it starts with `ollama/`** | `ollama/gemma2` |
+| fcc-server chat | `MODEL_OPUS` / `MODEL_SONNET` / `MODEL_HAIKU` | the OmniRoute cloud pool |
+
+So the small local model drives the on-device builder and nothing else —
+precisely the split install/0 asks for.
+
+### Notes
+
+- fcc-server rewrites `~/.fcc/.env` on start, expanding it to its full settings
+  list. It preserves your values, and adds `ANTHROPIC_AUTH_TOKEN=freecc`, which
+  it then requires as a **Bearer** header — `x-api-key` is rejected. The
+  dashboard already sends Bearer.
+- The tab's status line reports `MODEL`, so it now reads "Ollama" even though
+  the chat half runs on the cloud pool. Cosmetic.
+
+Verified: "build me a colorful starfield" produced a working 949-byte canvas
+page with `engine: "local"`, and the chat still answers correctly.
+
+---
+
 ## Related
 
 `omniroute-team-hub/` is excluded from this repo — it is a separate project
