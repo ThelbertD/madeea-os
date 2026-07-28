@@ -63,5 +63,7 @@
   "_claude_note": "Point at the real .exe, not the npm .cmd shim: a shim needs a shell to spawn on Windows, and a shell swallows the piped prompt.",
   "hermes": "C:\\Users\\USER\\AppData\\Local\\hermes\\hermes-agent\\venv\\Scripts\\hermes.exe",
   "hermesHome": "C:\\Users\\USER\\AppData\\Local\\hermes",
-  "_hermes_note": "Explicit .exe path: auto-detect finds the extensionless venv shim, which Node cannot spawn on Windows. hermesHome matches the HERMES_HOME the native installer uses, so state is not split (install/24)."
+  "_hermes_note": "Explicit .exe path: auto-detect finds the extensionless venv shim, which Node cannot spawn on Windows. hermesHome matches the HERMES_HOME the native installer uses, so state is not split (install/24).",
+  "vaultRoot": "C:\\Users\\USER\\Documents\\Obsidian Vault",
+  "_vault_note": "Created 2026-07-28. Auto-detect would find this path anyway; set explicitly so it is unambiguous. Deliberately NOT under OneDrive — a growing vault there causes constant sync churn."
 }

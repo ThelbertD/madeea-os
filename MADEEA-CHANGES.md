@@ -238,6 +238,31 @@ Restart without rebuilding: `cd source && PORT=3737 npm start`.
 
 ---
 
+## 9. Memory / Obsidian (install/11) — vault created and connected
+
+No personal vault existed. The only `.obsidian` folder on the machine belonged
+to the SEO Office repo (`~/seo-os/vendored/marketing-brain/template-brain`) —
+a bundled template, not notes, so pointing the galaxy at it would have filled
+it with someone else's marketing files.
+
+Obsidian itself is not installed, and does not need to be: the dashboard reads
+plain markdown. Created a vault at `~/Documents/Obsidian Vault` — the path
+auto-detect already looks for, and deliberately outside OneDrive, since a
+growing vault there causes constant sync churn.
+
+Seeded with five linked notes (Home, Setup, Services, Free AI, Troubleshooting)
+so the galaxy has real edges rather than isolated dots. The Troubleshooting note
+records the actual failures hit during this setup.
+
+Also does guide 0's pro tip: the 37 `install/` guides are copied to
+`MadeEA OS/Install Guides/` inside the vault, so agents can read them as context
+when asked to fix something.
+
+Verified: memory graph reports 42 nodes / 17 links, `/memory` and `/journal`
+both 200, and `memory/recent` lists the new notes.
+
+---
+
 ## Related
 
 `omniroute-team-hub/` is excluded from this repo — it is a separate project
