@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, existsSync } from "node:fs";
 import path from "node:path";
 import { hermesHome } from "@/lib/config";
 
@@ -24,6 +24,22 @@ export async function POST(req: Request) {
   const outDir = path.join(process.cwd(), "public", "openmontage", "generated");
   mkdirSync(jobsDir, { recursive: true });
   mkdirSync(outDir, { recursive: true });
+
+  // The pipeline scripts do not ship with this pack and nothing scaffolds
+  // them, so spawning here would detach into nothing: no job file is ever
+  // written and the UI polls "Starting… 0%" forever with no error. Fail
+  // loudly instead of pretending work has begun.
+  if (!existsSync(script)) {
+    return Response.json({
+      error:
+        `OpenMontage pipeline not installed — ${path.basename(script)} is missing.
+` +
+        `Expected at: ${script}
+` +
+        `This pack ships the tab but not the Python pipeline it drives, and nothing creates it. ` +
+        `Generation also requires an OpenRouter key with credit (billed per run).`,
+    }, { status: 503 });
+  }
 
   const jobFile = path.join(jobsDir, `${jobId}.json`);
   const outFile = path.join(outDir, `${jobId}.mp4`);

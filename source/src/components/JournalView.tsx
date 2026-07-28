@@ -26,7 +26,13 @@ function shiftDate(iso: string, days: number): string {
 }
 
 export default function JournalView() {
-  const [date, setDate] = useState<string>(todayISO());
+  // Initialised empty, then set on mount. Seeding from todayISO() directly
+  // bakes the *build* date into prerendered HTML; when the client hydrates on
+  // a later day the text differs and React throws a hydration mismatch (#418).
+  // Harmless on the live dashboard, which renders per request — but the static
+  // export shipped to Pages/Vercel is prerendered once and drifts every day.
+  const [date, setDate] = useState<string>("");
+  useEffect(() => { setDate((d) => d || todayISO()); }, []);
   const [entries, setEntries] = useState<Entry[]>([]);
   const [days, setDays] = useState<string[]>([]);
   const [input, setInput] = useState("");
@@ -39,7 +45,7 @@ export default function JournalView() {
     setDays(j.days ?? []);
   }
 
-  useEffect(() => { load(date); }, [date]);
+  useEffect(() => { if (date) load(date); }, [date]);   // date is "" until mounted
 
   async function add() {
     const text = input.trim();
