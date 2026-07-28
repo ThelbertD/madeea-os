@@ -372,6 +372,48 @@ it needs `provider: "elevenlabs"` explicitly.
 
 ---
 
+## 13. Hermes (install/4)
+
+Already installed — v0.16.0, Python 3.11.15, running on `minimax-m3:cloud`, so
+**no OpenRouter key is required** for it to work. The guide's steps 1–3 were
+already satisfied; a key would only buy stronger models.
+
+### A profile split that had gone unnoticed
+
+`hermes profile list` showed `default` (active, with the model) and `main`
+(empty) — and `main` existed only because the Jarvis guide had me create
+`profiles/main/.env` for the ElevenLabs key.
+
+The two halves disagreed about which profile was live:
+
+| | active profile |
+|---|---|
+| hermes CLI | `default` |
+| the dashboard | no `active_profile` file → falls back to `main` |
+
+Jarvis worked purely because the fallback happened to match where the key was.
+Anyone running `hermes profile use default` would have silently lost the voice.
+
+Fixed by making both agree on `main` (`hermes profile use main`, which writes
+the `active_profile` file) and giving that profile the model in
+`profiles/main/config.yaml` — the guide's own step 4 — so switching did not
+leave Hermes brainless.
+
+### A probe timeout, again
+
+Right after, vitals reported `hermes ok=false` while `hermes status` exited 0.
+The command takes **~10s** here — it probes every configured provider before
+printing — against an **8s** limit in the route. Raised to 25s, since the time
+scales with provider count.
+
+This is the third probe on this machine tuned for a faster host: OmniRoute's
+was 1500ms against a 6s cold start, and this one 8s against 10s.
+
+Verified after rebuild: claude and hermes both `ok: true`, Jarvis still sees
+its 21 voices.
+
+---
+
 ## Related
 
 `omniroute-team-hub/` is excluded from this repo — it is a separate project

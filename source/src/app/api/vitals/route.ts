@@ -16,7 +16,11 @@ async function computeVitals() {
   const [claude, openclaw, hermes, antigravity] = await Promise.all([
     run("claude", ["--version"], { timeoutMs: 6000 }),
     run("openclaw", ["health"], { timeoutMs: 6000 }),
-    run("hermes", ["status"], { timeoutMs: 8000 }),
+    // `hermes status` probes every configured provider before printing, which
+    // takes ~10s here — over the old 8s limit, so the tab reported Hermes down
+    // while the command itself exited 0. Timing scales with provider count, so
+    // give it real headroom.
+    run("hermes", ["status"], { timeoutMs: 25000 }),
     run("antigravity", ["--version"], { timeoutMs: 6000 }),
   ]);
   return { claude, openclaw, hermes, antigravity };
