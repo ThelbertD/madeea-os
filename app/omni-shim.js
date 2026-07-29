@@ -740,12 +740,32 @@
           };
           var article = '';
           try {
-            var r = await nativeFetch(cfg.base + '/chat/completions', {
+            var endpoint = cfg.base + '/chat/completions';
+            var r = await nativeFetch(endpoint, {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + cfg.key },
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: 'Bearer ' + cfg.key,
+                // OpenRouter attributes browser traffic with these; harmless
+                // elsewhere and some gateways reject unattributed requests.
+                'HTTP-Referer': location.origin,
+                'X-Title': 'MadeEA OS'
+              },
               body: JSON.stringify(body)
             });
-            if (!r.ok) throw new Error('HTTP ' + r.status + ' — ' + (await r.text()).slice(0, 300));
+            if (!r.ok) {
+              var detail = (await r.text()).slice(0, 300);
+              // A stored key that the provider rejects used to be a dead end:
+              // the prompt only appears when nothing is stored, so a wrong key
+              // meant the same 401 forever with no way to replace it. Drop it
+              // so the next run asks again.
+              if (r.status === 401 || r.status === 403) {
+                store.set('seo.key', '');
+                detail += '\n\nThat key was rejected, so it has been cleared — run Generate again to enter a different one.';
+              }
+              throw new Error('HTTP ' + r.status + ' from ' + endpoint
+                + '\nmodel: ' + cfg.model + '\n' + detail);
+            }
             var reader = r.body.getReader(), dec = new TextDecoder(), buf = '';
             while (true) {
               var res = await reader.read();
@@ -865,8 +885,15 @@
     try {
       var q = new URLSearchParams(location.search), touched = false;
       var k = q.get('seokey'), bs = q.get('seobase'), md = q.get('seomodel');
+      // A base URL set once sticks in this browser forever, so a stale or
+      // mistyped one keeps failing against an endpoint the operator has
+      // forgotten about. ?seoreset=1 puts key, base and model back to stock.
+      if (q.get('seoreset')) {
+        store.set('seo.key', ''); store.set('seo.base', ''); store.set('seo.model', '');
+        touched = true;
+      }
       if (k === 'off') { store.set('seo.key', ''); touched = true; }
-      else if (k) { store.set('seo.key', k); touched = true; }
+      else if (k) { store.set('seo.key', k.trim()); touched = true; }
       if (bs) { store.set('seo.base', bs.replace(/\/+$/, '')); touched = true; }
       if (md) { store.set('seo.model', md); touched = true; }
       if (touched) history.replaceState({}, '', location.pathname + location.hash);
