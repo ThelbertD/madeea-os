@@ -24,3 +24,8 @@ npm-debug.log*
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# SEO content packs. Cloned per-install; may contain client-specific
+# strategy, so they never belong in this public repo.
+/packs/*
+!/packs/README.md

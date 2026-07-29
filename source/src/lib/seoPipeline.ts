@@ -1,5 +1,5 @@
 import { readdir, readFile, stat } from "node:fs/promises";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import os from "node:os";
 
@@ -35,6 +35,7 @@ interface SeoConfig {
   sites?: Site[];
   transcriptsDir?: string;
   blogPostSkill?: string;
+  pack?: string;
 }
 
 function loadConfig(): SeoConfig {
@@ -60,7 +61,48 @@ export const SEO_CONFIGURED = Boolean(CONFIG.sites?.length);
 
 export const TRANSCRIPTS_DIR = CONFIG.transcriptsDir
   ?? path.join(SITES[0]?.path ?? os.homedir(), ".claude", "transcripts");
+
+/* Content packs.
+ *
+ * A pack is a folder under packs/ holding a `blog-post*.md` writing skill —
+ * how a given client's articles should be written. The stock skill targets
+ * the pack author's own five-site funnel, which is wrong for anyone else, so
+ * a pack lets the SEO tab write in the client's voice instead of needing the
+ * skill path wired up by hand.
+ *
+ * packs/ is gitignored: a pack encodes a client's positioning and strategy
+ * and must not land in this public repo. Clone one in per install.
+ */
+export interface SeoPack { id: string; skillPath: string; }
+
+function discoverPacks(): SeoPack[] {
+  // cwd is the Next app (source/), so packs/ sits one level up.
+  const dir = path.join(process.cwd(), "..", "packs");
+  try {
+    return readdirSync(dir, { withFileTypes: true })
+      .filter((e) => e.isDirectory())
+      .map((e) => {
+        const skill = readdirSync(path.join(dir, e.name))
+          .find((f) => /^blog-post.*\.md$/i.test(f));
+        return skill ? { id: e.name, skillPath: path.join(dir, e.name, skill) } : null;
+      })
+      .filter((p): p is SeoPack => p !== null)
+      .sort((a, b) => a.id.localeCompare(b.id));
+  } catch {
+    return [];
+  }
+}
+
+export const SEO_PACKS = discoverPacks();
+
+// Explicit config wins; otherwise the first installed pack; otherwise the
+// stock skill next to the first site.
+export const ACTIVE_PACK = CONFIG.pack
+  ? SEO_PACKS.find((p) => p.id === CONFIG.pack) ?? SEO_PACKS[0]
+  : SEO_PACKS[0];
+
 export const BLOG_POST_SKILL = CONFIG.blogPostSkill
+  ?? ACTIVE_PACK?.skillPath
   ?? path.join(SITES[0]?.path ?? os.homedir(), ".claude", "skills", "blog-post.md");
 
 export interface SiteStats {
