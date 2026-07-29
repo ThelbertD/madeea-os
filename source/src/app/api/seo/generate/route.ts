@@ -69,9 +69,14 @@ export async function POST(req: Request) {
     // rest of the pipeline was configured. Build them from SITES instead.
     `1. Use the Write tool to create ${SITES.length} unique long-form SEO articles at these exact paths:`,
     ...SITES.map((s) => `   - ${nodePath.join(s.postsDir, `${slug}.md`).replace(/\\/g, "/")}`),
-    `2. Each article must follow the skill: unique CTR-optimised title, unique opening, unique structure, frontmatter, multi-video embeds, 4 CTAs, schema markup, author bio, comparison tables. UK English.`,
-    `3. Do NOT run any deploy commands — the dashboard handles deploy. Just write the ${SITES.length} files.`,
-    `4. When finished, print a short summary listing each path you wrote and its title.`,
+    `2. Each article must follow the skill exactly — structure, length, frontmatter, schema and voice are all defined there.`,
+    // The skill is the contract, not this prompt. A pack may ask for companion
+    // files beside the article (social set, email, next-topic ideas), and the
+    // old wording — "just write the N files" — told the model to skip them, so
+    // a multi-deliverable pack silently produced only the article.
+    `3. If the skill defines companion files beside the article, write those too, in the same folder as the article path above.`,
+    `4. Do NOT run any deploy commands — the dashboard handles deploy. Only write files.`,
+    `5. When finished, print a short summary listing each path you wrote and its title.`,
     ``,
     `Begin now.`,
   ].join("\n");

@@ -1,0 +1,72 @@
+[
+  {
+    "id": "blog_content_writer",
+    "description": "Writes SEO-optimized blog posts for D Express Locksmith targeting homeowners, businesses, and drivers in suburban Philadelphia.",
+    "chars": 3356
+  },
+  {
+    "id": "content_idea_generator",
+    "description": "Generates strategic content ideas for D Express Locksmith targeting homeowners, businesses, and drivers in suburban Philadelphia.",
+    "chars": 2659
+  },
+  {
+    "id": "email_marketing_specialist",
+    "description": "Designs email campaigns and newsletters for D Express Locksmith \u2014 seasonal offers, security tips, and new-homebuyer specials.",
+    "chars": 2601
+  },
+  {
+    "id": "facebook_content_creator",
+    "description": "Creates Facebook content for D Express Locksmith \u2014 community presence, service highlights, and seasonal security tips.",
+    "chars": 2478
+  },
+  {
+    "id": "general_content_assistant",
+    "description": "A versatile AI content assistant for D Express Locksmith Inc. \u2014 locksmith and security content, messaging, and strategy.",
+    "chars": 2935
+  },
+  {
+    "id": "instagram_content_creator",
+    "description": "Creates Instagram content for D Express Locksmith \u2014 before/after lock upgrades, smart lock installs, security tips, and local community content.",
+    "chars": 2697
+  },
+  {
+    "id": "linkedin_content_creator",
+    "description": "Creates LinkedIn content for D Express Locksmith targeting commercial clients, property managers, and small businesses needing access control solutions.",
+    "chars": 3088
+  },
+  {
+    "id": "reddit_content_creator",
+    "description": "Crafts helpful Reddit posts for local Philadelphia and home improvement communities \u2014 positioning D Express Locksmith as the trusted security expert.",
+    "chars": 2765
+  },
+  {
+    "id": "seo_optimizer",
+    "description": "SEO strategy and optimization for D Express Locksmith \u2014 local locksmith searches in the Philadelphia suburbs.",
+    "chars": 2881
+  },
+  {
+    "id": "social_media_writer",
+    "description": "Creates platform-optimized social media posts for D Express Locksmith across Facebook, Instagram, X, and LinkedIn.",
+    "chars": 2693
+  },
+  {
+    "id": "tiktok_content_creator",
+    "description": "Generates TikTok video concepts for D Express Locksmith \u2014 lock demos, security tips, emergency service callouts, and local awareness content.",
+    "chars": 2918
+  },
+  {
+    "id": "twitter_content_creator",
+    "description": "Creates sharp X (Twitter) posts for D Express Locksmith \u2014 quick security tips, 24/7 availability reminders, and local community engagement.",
+    "chars": 2539
+  },
+  {
+    "id": "website_content_specialist",
+    "description": "Creates website copy for dexpresslock.com \u2014 service pages, landing pages, and FAQs for D Express Locksmith.",
+    "chars": 3008
+  },
+  {
+    "id": "youtube_content_creator",
+    "description": "Creates YouTube video scripts and descriptions for D Express Locksmith \u2014 security how-tos, service explainers, and community trust-building content.",
+    "chars": 3107
+  }
+]
