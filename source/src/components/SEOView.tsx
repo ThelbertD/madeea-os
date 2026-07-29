@@ -174,6 +174,10 @@ export default function SEOView() {
 
   // ── Sites / Deploy state ───────────────────────────────────────────
   const [sites, setSites] = useState<SiteStats[]>([]);
+  // The pipeline used to be a fixed 5-site funnel and the copy said so in
+  // five places. Site count is configurable now, so a 1-site install read
+  // "Generate 5 articles for all 5 sites" and then wrote one.
+  const siteCount = sites.length || 1;
   const [deployLog, setDeployLog] = useState<Record<string, string[]>>({});
   const [deployStatus, setDeployStatus] = useState<Record<string, "ok" | "err" | "running" | undefined>>({});
   // Site IDs currently deploying (allows parallel deploys)
@@ -609,7 +613,7 @@ export default function SEOView() {
           <div className="panel p-5">
             <div className="flex items-center gap-2 mb-4">
               <Sparkles size={16} className="text-[#a3e635]" />
-              <h3 className="text-sm font-medium">Generate 5 unique SEO articles for all 5 sites</h3>
+              <h3 className="text-sm font-medium">{`Generate ${siteCount} unique SEO article${siteCount === 1 ? "" : "s"} for ${siteCount === 1 ? "your site" : `all ${siteCount} sites`}`}</h3>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -746,7 +750,7 @@ export default function SEOView() {
                 <div>
                   <div className="text-[13px] font-medium text-[var(--fg)]">Auto-deploy after generate</div>
                   <div className="text-[11px] text-[var(--fg-dim)] mt-0.5 leading-snug">
-                    As soon as Claude finishes writing, all 5 sites build + deploy in parallel.
+                    {`As soon as Claude finishes writing, ${siteCount === 1 ? "your site builds" : `all ${siteCount} sites build`} + deploy in parallel.`}
                   </div>
                 </div>
               </div>
@@ -769,7 +773,7 @@ export default function SEOView() {
 
             <div className="mt-3 flex items-center justify-between">
               <div className="text-[11px] text-[var(--fg-dim)]">
-                Writes to all 5 sites · ⚠️ Live filesystem writes ·{" "}
+                {`Writes to ${siteCount === 1 ? "your site" : `all ${siteCount} sites`}`} · ⚠️ Live filesystem writes ·{" "}
                 {transcriptMode === "pick"
                   ? (selectedTranscript ? `transcript: ${selectedTranscript}` : "no transcript")
                   : (pastedTranscript.trim() ? `pasted transcript (${(pastedTranscript.length/1024).toFixed(1)}KB)` : "no transcript")
@@ -790,7 +794,7 @@ export default function SEOView() {
                     className="px-4 h-[38px] rounded-lg flex items-center gap-1.5 text-sm transition disabled:opacity-40"
                     style={{ background: "rgba(163,230,53,0.2)", border: "1px solid rgba(163,230,53,0.55)", color: "#a3e635" }}
                   >
-                    <Play size={14} /> Generate 5 articles
+                    <Play size={14} /> {`Generate ${siteCount} article${siteCount === 1 ? "" : "s"}`}
                   </button>
                 )}
               </div>
@@ -1076,7 +1080,7 @@ export default function SEOView() {
                       {s.articles.length > 0 && (
                         <div className="mt-2 pt-2 border-t border-[var(--panel-border)]">
                           <div className="text-[10px] uppercase tracking-widest text-[var(--fg-dimmer)] mb-1.5">
-                            {s.articles.length} of 5 articles written
+                            {s.articles.length} of {siteCount} article{siteCount === 1 ? "" : "s"} written
                           </div>
                           <ul className="space-y-1">
                             {s.articles.map((a) => {

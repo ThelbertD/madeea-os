@@ -1,5 +1,5 @@
 1:"$Sreact.fragment"
-2:I[89419,["/madeea-os/app/_next/static/chunks/0pxg30ersxmxp.js","/madeea-os/app/_next/static/chunks/02bkefr0xi91t.js","/madeea-os/app/_next/static/chunks/0xd~dkz0__nxk.js","/madeea-os/app/_next/static/chunks/0f1jd.6ncrkl_.js"],"default"]
-3:I[98703,["/madeea-os/app/_next/static/chunks/0pxg30ersxmxp.js","/madeea-os/app/_next/static/chunks/02bkefr0xi91t.js","/madeea-os/app/_next/static/chunks/0xd~dkz0__nxk.js","/madeea-os/app/_next/static/chunks/0f1jd.6ncrkl_.js"],"default"]
+2:I[39756,["/madeea-os/app/_next/static/chunks/0gvs.-3c2c1wc.js","/madeea-os/app/_next/static/chunks/0t2xr05rlu96l.js","/madeea-os/app/_next/static/chunks/0.6z0qylrpvk8.js","/madeea-os/app/_next/static/chunks/0xs84gspjw4_s.js"],"default"]
+3:I[37457,["/madeea-os/app/_next/static/chunks/0gvs.-3c2c1wc.js","/madeea-os/app/_next/static/chunks/0t2xr05rlu96l.js","/madeea-os/app/_next/static/chunks/0.6z0qylrpvk8.js","/madeea-os/app/_next/static/chunks/0xs84gspjw4_s.js"],"default"]
 4:[]
-0:{"rsc":["$","$1","c",{"children":[null,["$","$L2",null,{"parallelRouterKey":"children","template":["$","$L3",null,{}]}]]}],"isPartial":false,"staleTime":300,"varyParams":"$W4","buildId":"eRtHbMNmWKg1EQn5f0mdE"}
+0:{"rsc":["$","$1","c",{"children":[null,["$","$L2",null,{"parallelRouterKey":"children","template":["$","$L3",null,{}]}]]}],"isPartial":false,"staleTime":300,"varyParams":"$W4","buildId":"TL1qCO7vOkZ_lV3D2XFeC"}

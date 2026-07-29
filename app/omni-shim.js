@@ -693,15 +693,33 @@
         async start(c) {
           var push = function (o) { try { c.enqueue(enc.encode(JSON.stringify(o) + '\n')); } catch (e) {} };
           if (!cfg.key) {
-            push({ type: 'stderr', text:
-              'No API key set for this browser.\n\n' +
-              'Generation needs a model, and a static site has no server to run one. ' +
-              'Add a key with ?seokey=YOUR_KEY on this page URL (OpenRouter by default; ' +
-              'add &seobase=https://api.example.com/v1 for another OpenAI-compatible host). ' +
-              'It is stored in this browser only.\n' });
-            push({ type: 'done', code: 1 });
-            try { c.close(); } catch (e) {}
-            return;
+            // Telling someone to hand-edit a query string is a dead end. Ask
+            // for the key here, save it, and carry straight on.
+            var typed = null;
+            try {
+              typed = window.prompt(
+                'Generation needs a model API key.\n\n' +
+                'A published page has no server, so the request goes straight from this ' +
+                'browser to the provider. The key is saved in this browser only — never ' +
+                'uploaded or committed.\n\n' +
+                'Paste an OpenRouter key (openrouter.ai/keys), or any OpenAI-compatible key:'
+              );
+            } catch (e) {}
+            if (typed && typed.trim()) {
+              store.set('seo.key', typed.trim());
+              cfg = seoKeyConfig();
+            } else {
+              push({ type: 'stderr', text:
+                'No API key set for this browser.\n\n' +
+                'Generation needs a model, and a published page has no server to run one. ' +
+                'Everything else here — Sites, Skill, Transcripts, History — works without it.\n\n' +
+                'Run Generate again to be asked for a key, or add ?seokey=YOUR_KEY to this ' +
+                'URL. Defaults to OpenRouter; add &seobase=https://host/v1 and &seomodel=NAME ' +
+                'for another OpenAI-compatible provider. Stored in this browser only.\n' });
+              push({ type: 'done', code: 1 });
+              try { c.close(); } catch (e) {}
+              return;
+            }
           }
           var session = { id: 'ss-' + Date.now().toString(36), createdAt: Date.now(),
                           keyword: keyword, slug: slug, status: 'running',
