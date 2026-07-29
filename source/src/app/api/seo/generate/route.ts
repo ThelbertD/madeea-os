@@ -1,5 +1,6 @@
 import { spawnStream } from "@/lib/runner";
 import { readFile } from "node:fs/promises";
+import nodePath from "node:path";
 import { BLOG_POST_SKILL, readTranscript, SITES } from "@/lib/seoPipeline";
 import { startSession, appendArticle, finishSession, type ArticleWritten } from "@/lib/seoHistory";
 import { CLAUDE_MODEL } from "@/lib/config";
@@ -62,14 +63,14 @@ export async function POST(req: Request) {
     ``,
     `## What to do now`,
     ``,
-    `1. Use the Write tool to create 5 unique long-form SEO articles at these exact paths:`,
-    `   - /Users/juliangoldie/AIProfitBoardroom.com/src/blog/posts/${slug}.md`,
-    `   - /Users/juliangoldie/AIProfitBoardroom-main/src/blog/posts/${slug}.md`,
-    `   - /Users/juliangoldie/juliangoldieaiautomation/src/blog/posts/${slug}.md`,
-    `   - /Users/juliangoldie/aisuccesslab/src/blog/posts/${slug}.md`,
-    `   - /Users/juliangoldie/aimoneylab/src/blog/posts/${slug}.md`,
+    // These were hard-coded to /Users/juliangoldie/… — the pack author's own
+    // Mac. On any other machine Claude was told to write the articles into
+    // paths that don't exist, so a run could never land a file however well the
+    // rest of the pipeline was configured. Build them from SITES instead.
+    `1. Use the Write tool to create ${SITES.length} unique long-form SEO articles at these exact paths:`,
+    ...SITES.map((s) => `   - ${nodePath.join(s.postsDir, `${slug}.md`).replace(/\\/g, "/")}`),
     `2. Each article must follow the skill: unique CTR-optimised title, unique opening, unique structure, frontmatter, multi-video embeds, 4 CTAs, schema markup, author bio, comparison tables. UK English.`,
-    `3. Do NOT run any deploy commands — the dashboard handles deploy. Just write the 5 files.`,
+    `3. Do NOT run any deploy commands — the dashboard handles deploy. Just write the ${SITES.length} files.`,
     `4. When finished, print a short summary listing each path you wrote and its title.`,
     ``,
     `Begin now.`,

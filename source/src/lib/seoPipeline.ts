@@ -1,4 +1,5 @@
 import { readdir, readFile, stat } from "node:fs/promises";
+import { readFileSync } from "node:fs";
 import path from "node:path";
 import os from "node:os";
 
@@ -11,7 +12,16 @@ export interface Site {
 }
 
 // The 5-site SEO funnel, mirrored from the blog-post.md skill.
-export const SITES: Site[] = [
+//
+// These defaults are the pack author's own sites under his home directory.
+// On anyone else's machine none of them exist, so every tab in the SEO
+// pipeline failed: Skill 404'd, Transcripts came back empty, and Generate
+// would have written five articles into folders that aren't there.
+//
+// The pack's fix is to hand-edit this array (see seoPipeline.ts.template in
+// the SEO Pack), which is lost on every update. Read a config file instead
+// and keep these as the fallback.
+const DEFAULT_SITES: Site[] = [
   { id: "bestaiagentcommunity",  name: "bestaiagentcommunity.com",   url: "https://bestaiagentcommunity.com",  path: path.join(os.homedir(), "AIProfitBoardroom.com"),         postsDir: path.join(os.homedir(), "AIProfitBoardroom.com", "src/blog/posts") },
   { id: "aiprofitboardroom",     name: "aiprofitboardroom.com",      url: "https://aiprofitboardroom.com",     path: path.join(os.homedir(), "AIProfitBoardroom-main"),         postsDir: path.join(os.homedir(), "AIProfitBoardroom-main", "src/blog/posts") },
   { id: "juliangoldieautomation", name: "juliangoldieaiautomation.com", url: "https://juliangoldieaiautomation.com", path: path.join(os.homedir(), "juliangoldieaiautomation"), postsDir: path.join(os.homedir(), "juliangoldieaiautomation", "src/blog/posts") },
@@ -19,8 +29,39 @@ export const SITES: Site[] = [
   { id: "aimoneylab",            name: "aimoneylabjuliangoldie.com", url: "https://aimoneylabjuliangoldie.com", path: path.join(os.homedir(), "aimoneylab"),                  postsDir: path.join(os.homedir(), "aimoneylab", "src/blog/posts") },
 ];
 
-export const TRANSCRIPTS_DIR = path.join(os.homedir(), "AIProfitBoardroom.com", ".claude", "transcripts");
-export const BLOG_POST_SKILL = path.join(os.homedir(), "AIProfitBoardroom.com", ".claude", "skills", "blog-post.md");
+const CONFIG_PATH = path.join(os.homedir(), ".agentic-os", "seo-sites.json");
+
+interface SeoConfig {
+  sites?: Site[];
+  transcriptsDir?: string;
+  blogPostSkill?: string;
+}
+
+function loadConfig(): SeoConfig {
+  try {
+    const raw = JSON.parse(readFileSync(CONFIG_PATH, "utf8")) as SeoConfig;
+    // A malformed or half-written config should fall back rather than crash
+    // every SEO route at import time.
+    if (raw.sites && (!Array.isArray(raw.sites) || raw.sites.some((s) => !s?.id || !s?.postsDir))) {
+      delete raw.sites;
+    }
+    return raw;
+  } catch {
+    return {};
+  }
+}
+
+const CONFIG = loadConfig();
+
+export const SITES: Site[] = CONFIG.sites?.length ? CONFIG.sites : DEFAULT_SITES;
+
+export const SEO_CONFIG_PATH = CONFIG_PATH;
+export const SEO_CONFIGURED = Boolean(CONFIG.sites?.length);
+
+export const TRANSCRIPTS_DIR = CONFIG.transcriptsDir
+  ?? path.join(SITES[0]?.path ?? os.homedir(), ".claude", "transcripts");
+export const BLOG_POST_SKILL = CONFIG.blogPostSkill
+  ?? path.join(SITES[0]?.path ?? os.homedir(), ".claude", "skills", "blog-post.md");
 
 export interface SiteStats {
   site: Site;
