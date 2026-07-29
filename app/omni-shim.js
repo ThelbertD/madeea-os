@@ -611,6 +611,177 @@
       return json({ q: url.searchParams.get('q') || '', notes: out.slice(0, 60) });
     },
 
+    /* ── SEO pipeline, without a server ───────────────────────────────
+       On a static host there is no filesystem to read packs/ from and no
+       Claude CLI to spawn, so every SEO tab came back empty.
+
+       Sites, Skill, Transcripts and History need no model at all — serve
+       them from the bundled snapshot plus browser storage. Generate does
+       need one; it calls an OpenAI-compatible endpoint with a key the
+       operator supplies, kept in this browser and never committed. The
+       article is offered as a download, since a web page cannot write into
+       a site repo. */
+
+    'seo/sites': async function () {
+      var s = await seoSnap();
+      var posts = seoStore('articles', []);
+      return json({
+        sites: ((s && s.sites) || []).map(function (site) {
+          var mine = posts.filter(function (p) { return p.siteId === site.id; });
+          return {
+            site: { id: site.id, name: site.name, url: site.url, path: '(browser)', postsDir: '(browser)' },
+            postCount: mine.length,
+            recent: mine.slice(-6).reverse().map(function (p) {
+              return { slug: p.slug, mtime: p.mtime, title: p.title };
+            })
+          };
+        })
+      });
+    },
+
+    'seo/skill': async function () {
+      var s = await seoSnap();
+      if (!s || !s.skill) return new Response('# no pack bundled', { status: 404 });
+      return new Response(s.skill, { headers: { 'Content-Type': 'text/markdown; charset=utf-8' } });
+    },
+
+    'seo/history': async function () {
+      return json({ sessions: seoStore('sessions', []).slice().reverse(), deploys: [] });
+    },
+
+    'seo/transcripts': async function () {
+      return json({ transcripts: seoStore('transcripts', []) });
+    },
+
+    'seo/transcript': async function (req, url) {
+      var slug = url.searchParams.get('slug') || '';
+      var t = seoStore('transcripts', []).filter(function (x) { return x.slug === slug; })[0];
+      return json(t ? { slug: slug, text: t.text } : { error: 'not found' }, t ? 200 : 404);
+    },
+
+    'seo/transcript/save': async function (req) {
+      var b = await req.json().catch(function () { return {}; });
+      var slug = String(b.slug || '').replace(/[^A-Za-z0-9_-]/g, '') || 'transcript';
+      var text = String(b.text || '');
+      var list = seoStore('transcripts', []).filter(function (t) { return t.slug !== slug; });
+      list.unshift({ slug: slug, text: text, bytes: text.length, mtime: Date.now(),
+                     preview: text.slice(0, 220).replace(/\s+/g, ' ').trim() });
+      seoStore('transcripts', list, true);
+      return json({ ok: true, slug: slug });
+    },
+
+    'seo/generate': async function (req) {
+      var b = await req.json().catch(function () { return {}; });
+      var keyword = String(b.keyword || '').trim();
+      var slug = String(b.slug || '').trim();
+      if (!keyword || !/^[a-z0-9-]{3,80}$/.test(slug)) {
+        return new Response('missing keyword or invalid slug', { status: 400 });
+      }
+      var snap = await seoSnap();
+      if (!snap || !snap.skill) return new Response('no pack bundled', { status: 500 });
+
+      var transcript = '';
+      if (b.transcriptText) transcript = String(b.transcriptText);
+      else if (b.transcriptSlug) {
+        var t = seoStore('transcripts', []).filter(function (x) { return x.slug === b.transcriptSlug; })[0];
+        if (t) transcript = t.text;
+      }
+
+      var cfg = seoKeyConfig();
+      var enc = new TextEncoder();
+      return new Response(new ReadableStream({
+        async start(c) {
+          var push = function (o) { try { c.enqueue(enc.encode(JSON.stringify(o) + '\n')); } catch (e) {} };
+          if (!cfg.key) {
+            push({ type: 'stderr', text:
+              'No API key set for this browser.\n\n' +
+              'Generation needs a model, and a static site has no server to run one. ' +
+              'Add a key with ?seokey=YOUR_KEY on this page URL (OpenRouter by default; ' +
+              'add &seobase=https://api.example.com/v1 for another OpenAI-compatible host). ' +
+              'It is stored in this browser only.\n' });
+            push({ type: 'done', code: 1 });
+            try { c.close(); } catch (e) {}
+            return;
+          }
+          var session = { id: 'ss-' + Date.now().toString(36), createdAt: Date.now(),
+                          keyword: keyword, slug: slug, status: 'running',
+                          transcriptSource: transcript ? '(provided)' : '(none)', articles: [] };
+          var sessions = seoStore('sessions', []); sessions.push(session); seoStore('sessions', sessions, true);
+
+          push({ type: 'system', subtype: 'init' });
+          var body = {
+            model: cfg.model, stream: true, max_tokens: 8000,
+            messages: [
+              { role: 'system', content: snap.skill },
+              { role: 'user', content:
+                'Target keyword: ' + keyword + '\nFile slug: ' + slug + '\n' +
+                (transcript ? '\n<transcript>\n' + transcript + '\n</transcript>\n' : '') +
+                '\nWrite ONE article now, following the skill exactly. ' +
+                'Output only the markdown file contents, starting with the YAML frontmatter.' }
+            ]
+          };
+          var article = '';
+          try {
+            var r = await nativeFetch(cfg.base + '/chat/completions', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + cfg.key },
+              body: JSON.stringify(body)
+            });
+            if (!r.ok) throw new Error('HTTP ' + r.status + ' — ' + (await r.text()).slice(0, 300));
+            var reader = r.body.getReader(), dec = new TextDecoder(), buf = '';
+            while (true) {
+              var res = await reader.read();
+              if (res.done) break;
+              buf += dec.decode(res.value, { stream: true });
+              var lines = buf.split('\n'); buf = lines.pop() || '';
+              for (var i = 0; i < lines.length; i++) {
+                var ln = lines[i].trim();
+                if (ln.indexOf('data:') !== 0) continue;
+                var payload = ln.slice(5).trim();
+                if (payload === '[DONE]') continue;
+                try {
+                  var d = JSON.parse(payload);
+                  var piece = d.choices && d.choices[0] && d.choices[0].delta && d.choices[0].delta.content;
+                  if (piece) { article += piece; push({ type: 'stream_event', event: { delta: { text: piece } } }); }
+                } catch (e) {}
+              }
+            }
+          } catch (e) {
+            push({ type: 'stderr', text: String((e && e.message) || e) + '\n' });
+            session.status = 'failed'; seoStore('sessions', seoStore('sessions', []).map(function (s) {
+              return s.id === session.id ? session : s; }), true);
+            push({ type: 'done', code: 1 }); try { c.close(); } catch (e2) {} return;
+          }
+
+          var title = (article.match(/^title:\s*["']?(.+?)["']?\s*$/m) || [])[1] || slug;
+          var siteId = (snap.sites[0] || {}).id || 'site';
+          var arts = seoStore('articles', []);
+          arts.push({ siteId: siteId, slug: slug, title: title, mtime: Date.now(), body: article });
+          seoStore('articles', arts, true);
+          session.status = 'completed';
+          session.articles = [{ siteId: siteId, filePath: slug + '.md',
+                                liveUrl: ((snap.sites[0] || {}).url || '') + '/blog/' + slug + '/' }];
+          seoStore('sessions', seoStore('sessions', []).map(function (s) {
+            return s.id === session.id ? session : s; }), true);
+
+          // No filesystem here, so hand the file over instead of pretending it landed.
+          try {
+            var blob = new Blob([article], { type: 'text/markdown' });
+            var a = document.createElement('a');
+            a.href = URL.createObjectURL(blob); a.download = slug + '.md';
+            document.body.appendChild(a); a.click(); a.remove();
+            push({ type: 'result', result: 'Wrote ' + slug + '.md (' + article.length +
+                   ' chars) and downloaded it. A web page cannot write into your site repo — ' +
+                   'drop the file into its posts folder.' });
+          } catch (e) {
+            push({ type: 'result', result: 'Article generated (' + article.length + ' chars).' });
+          }
+          push({ type: 'done', code: 0, sessionId: session.id });
+          try { c.close(); } catch (e) {}
+        }
+      }), { headers: { 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Cache-Control': 'no-cache' } });
+    },
+
     'memory/note': async function (req, url) {
       var s = await memSnap();
       var p = url.searchParams.get('path') || '';
@@ -639,6 +810,50 @@
       .catch(function () { return null; });
     return MEMSNAP;
   }
+
+  /* ── SEO helpers ──────────────────────────────────────────────────── */
+
+  var SEOSNAP = null;
+  function seoSnap() {
+    if (SEOSNAP) return SEOSNAP;
+    SEOSNAP = nativeFetch(memBase() + '/seo-snapshot.json', { cache: 'force-cache' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .catch(function () { return null; });
+    return SEOSNAP;
+  }
+
+  // Sessions, transcripts and generated articles live in localStorage — small,
+  // synchronous, and they survive a reload.
+  function seoStore(key, dflt, write) {
+    if (write) { store.set('seo.' + key, dflt); return dflt; }
+    var v = store.get('seo.' + key, dflt);
+    return v == null ? dflt : v;
+  }
+
+  /* The model key.
+     Never bundled — it is the operator's, and this repo is public. Supply it
+     once via ?seokey=… (optionally ?seobase=… / ?seomodel=…); readQuery strips
+     it from the address bar so it is not shared by copy-paste or leaked in a
+     Referer header. */
+  function seoKeyConfig() {
+    return {
+      key: store.get('seo.key', ''),
+      base: (store.get('seo.base', '') || 'https://openrouter.ai/api/v1').replace(/\/+$/, ''),
+      model: store.get('seo.model', '') || 'anthropic/claude-sonnet-4.5'
+    };
+  }
+
+  (function readSeoQuery() {
+    try {
+      var q = new URLSearchParams(location.search), touched = false;
+      var k = q.get('seokey'), bs = q.get('seobase'), md = q.get('seomodel');
+      if (k === 'off') { store.set('seo.key', ''); touched = true; }
+      else if (k) { store.set('seo.key', k); touched = true; }
+      if (bs) { store.set('seo.base', bs.replace(/\/+$/, '')); touched = true; }
+      if (md) { store.set('seo.model', md); touched = true; }
+      if (touched) history.replaceState({}, '', location.pathname + location.hash);
+    } catch (e) {}
+  })();
 
   /* The pack ships "1261 omi · 186 notes" as literal text in three places —
      the original author's numbers, not this vault's. Correct them once the

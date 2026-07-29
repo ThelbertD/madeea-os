@@ -1,0 +1,14 @@
+{
+  "_note": "Drop this at ~/.agentic-os/seo-sites.json, then restart the dashboard (npm run dev).",
+  "sites": [
+    {
+      "id": "dexpresslock",
+      "name": "dexpresslock.com",
+      "url": "https://dexpresslock.com",
+      "path": "CHANGE-ME/dexpresslock",
+      "postsDir": "CHANGE-ME/dexpresslock/src/blog/posts"
+    }
+  ],
+  "transcriptsDir": "CHANGE-ME/.transcripts",
+  "blogPostSkill": "CHANGE-ME/.skills/blog-post-dexpress.md"
+}

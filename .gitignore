@@ -25,7 +25,8 @@ npm-debug.log*
 Thumbs.db
 desktop.ini
 
-# SEO content packs. Cloned per-install; may contain client-specific
-# strategy, so they never belong in this public repo.
+# SEO content packs. Ship the ones we maintain; ignore anything else
+# dropped in locally.
 /packs/*
 !/packs/README.md
+!/packs/dexpress-seo/
