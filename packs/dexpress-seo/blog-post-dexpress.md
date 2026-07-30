@@ -669,7 +669,7 @@ From `src/components/blog/ArticleGenerator.jsx`.
 
 # What to write
 
-Write **four** files. The operator gives you the article path; derive the rest
+Write **five** files. The operator gives you the article path; derive the rest
 by suffixing the same slug in the same folder.
 
 ### 1. `<slug>.md` — the article
@@ -711,6 +711,38 @@ Owned by `email_marketing_specialist`. Subject lines, preview text and body.
 Owned by `content_idea_generator`. The next content topics this article opens
 up, with the search intent behind each.
 
+### 5. `<slug>-reviews.md` — review & reputation set
+`seo_optimizer` calls for a Google Business Profile review strategy but nothing
+was producing one, and reviews move local rankings more than almost anything
+else a locksmith can control. Write, in this order:
+
+**a. Review requests** — three ways to ask a customer who has just been helped,
+each tied to this article's service:
+- an SMS, under 160 characters, with a direct GBP review link placeholder
+- a short email (`email_marketing_specialist` owns the voice)
+- two lines a technician can say at the door, without sounding scripted
+
+Ask at the moment the problem is solved. Never offer anything in exchange for a
+review — it violates Google's policies and the FTC's rules on endorsements.
+
+**b. Review showcase posts** — one per platform, following that platform's own
+agent, built to display a *real* customer review:
+LinkedIn, Facebook, Instagram, X, Reddit (only where genuinely welcome),
+YouTube community post. Leave the review text as a clearly-marked placeholder
+like `[REAL REVIEW — paste verbatim]`. Say which service and which town it
+should come from, so the right one is chosen.
+
+**c. Response templates** — how to reply publicly to:
+- a five-star review (short, specific, names the service; never generic)
+- a mixed review
+- a one-star review — acknowledge, take it offline to (267) 551-6815, never
+  argue or blame the customer
+
+**Hard rule for this file: invent nothing.** Do not write example reviews that
+could be mistaken for real ones, do not invent star counts, review totals or
+customer names. Fabricated reviews are illegal in the US and would put the
+client at real risk. Every place a real review belongs gets a placeholder.
+
 Fall back to `general_content_assistant` only for anything none of the above
 covers.
 
@@ -722,4 +754,4 @@ covers.
 - Never invent reviews, ratings, statistics or awards. The only credentials
   claimable are the ones in the briefs above.
 - Never promise a response time beyond the stated 24/7 availability.
-- Write all four files. A run that produces only the article is incomplete.
+- Write all five files. A run that produces only the article is incomplete.
