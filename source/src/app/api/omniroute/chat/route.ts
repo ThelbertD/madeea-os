@@ -8,7 +8,9 @@ export const dynamic = "force-dynamic";
 // with fallback: free providers are rate-limited, so we try a chain and return
 // the first that answers. No API key needed for the free providers.
 
-const BASE = "http://localhost:20128/v1";
+// 127.0.0.1, not localhost: over IPv6 this gateway answers 200 with an empty
+// completion instead of refusing, so callers saw success and no content.
+const BASE = "http://127.0.0.1:20128/v1";
 
 // Ordered free-model fallback chain. big-pickle is the proven worker; the free
 // providers here are all *reasoning* models, so we (a) steer them to answer

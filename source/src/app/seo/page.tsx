@@ -1,5 +1,5 @@
-import SEOView from "@/components/SEOView";
+import DExpressView from "@/components/DExpressView";
 
 export default function SEORoute() {
-  return <SEOView />;
+  return <DExpressView />;
 }

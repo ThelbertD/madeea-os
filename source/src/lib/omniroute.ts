@@ -8,7 +8,12 @@
 // All verified live: big-pickle drives both. The catch with the free reasoning
 // models is they loop unless told to answer immediately — hence OMNIROUTE_STEER.
 
-export const OMNIROUTE_BASE = process.env.OMNIROUTE_BASE_URL || "http://localhost:20128";
+// 127.0.0.1, not localhost. Node resolves localhost to ::1 first on Windows,
+// and over IPv6 this gateway answers 200 with an EMPTY completion rather than
+// refusing the connection — so every caller saw a successful request that
+// returned nothing, which looks like a broken model instead of a broken host.
+// Same request to 127.0.0.1 returns normally.
+export const OMNIROUTE_BASE = process.env.OMNIROUTE_BASE_URL || "http://127.0.0.1:20128";
 // Proven-reliable free coding model on this gateway (deepseek-v4-flash loops).
 export const OMNIROUTE_FREE_MODEL = process.env.OMNIROUTE_MODEL || "oc/big-pickle";
 // Dummy key — the free providers are keyless, but the CLIs require *something*.

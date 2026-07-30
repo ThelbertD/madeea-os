@@ -13,6 +13,9 @@ export default function ClaudePanel() {
   const [streaming, setStreaming] = useState(false);
   const [partial, setPartial] = useState("");
   const [ultracode, setUltracode] = useState(false);
+  // Defaults to acceptEdits: file edits go through, anything riskier still
+  // stops and asks. "bypass" turns every check off.
+  const [permissionMode, setPermissionMode] = useState("acceptEdits");
   const ctrlRef = useRef<AbortController | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -38,7 +41,7 @@ export default function ClaudePanel() {
       const r = await fetch("/api/claude/chat", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ prompt, ultracode, history }),
+        body: JSON.stringify({ prompt, ultracode, permissionMode, history }),
         signal: ctrl.signal,
       });
       if (!r.body) throw new Error("no body");
@@ -117,6 +120,28 @@ export default function ClaudePanel() {
             <Zap size={11} fill={ultracode ? "currentColor" : "none"} />
             Ultracode
           </button>
+          <select
+            value={permissionMode}
+            onChange={(e) => setPermissionMode(e.target.value)}
+            title="What Claude may do without stopping to ask"
+            className="px-2.5 py-1 rounded-full border text-[11px] uppercase tracking-widest transition bg-transparent outline-none cursor-pointer"
+            style={{
+              borderColor:
+                permissionMode === "bypassPermissions"
+                  ? "var(--plum)"
+                  : "var(--panel-border)",
+              color:
+                permissionMode === "bypassPermissions"
+                  ? "var(--plum)"
+                  : "var(--fg-dim)",
+            }}
+          >
+            <option value="plan" className="bg-[var(--bg-card)]">Plan only</option>
+            <option value="default" className="bg-[var(--bg-card)]">Ask first</option>
+            <option value="acceptEdits" className="bg-[var(--bg-card)]">Accept edits</option>
+            <option value="dontAsk" className="bg-[var(--bg-card)]">Don&apos;t ask</option>
+            <option value="bypassPermissions" className="bg-[var(--bg-card)]">Bypass all</option>
+          </select>
           <span className="pill pill-info">stream-json</span>
         </div>
       }

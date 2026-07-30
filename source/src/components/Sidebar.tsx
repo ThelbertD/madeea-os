@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion } from "framer-motion";
-import { LayoutGrid, Brain, TrendingUp, Columns3, NotebookText, Film, Building2, Workflow, MessagesSquare, Image as ImageIcon, Gamepad2, Music2, Network, Clapperboard, Repeat, Cpu, LayoutDashboard, Palette, GripVertical, Eye, EyeOff, SlidersHorizontal, Check, SquareTerminal, Route, Scissors, FlaskConical } from "lucide-react";
+import { Radar, LayoutGrid, Brain, TrendingUp, Columns3, NotebookText, Film, Building2, Workflow, MessagesSquare, Image as ImageIcon, Gamepad2, Music2, Network, Clapperboard, Repeat, Cpu, LayoutDashboard, Palette, GripVertical, Eye, EyeOff, SlidersHorizontal, Check, SquareTerminal, Route, Scissors, FlaskConical } from "lucide-react";
 import { useState, useEffect, type ReactNode } from "react";
 import AgentAvatar from "./AgentAvatar";
 
@@ -38,6 +38,7 @@ const NAV: NavItem[] = [
   { href: "/fusion",      label: "Fusion",      icon: <Network size={18} />,                         accent: "#fd5812", dim: "rgba(253, 88, 18,0.16)" },
   { href: "/sakana",      label: "Sakana Fugu", icon: <Network size={18} />,                         accent: "#ff5f9e", dim: "rgba(255,95,158,0.16)" },
   { href: "/local",       label: "Local",       icon: <Cpu size={18} />,                             accent: "#5eead4", dim: "rgba(94,234,212,0.16)" },
+  { href: "/fleet",       label: "Fleet",       icon: <Radar size={18} />,                          accent: "#fd5812", dim: "rgba(253,88,18,0.16)" },
   { href: "/agent-kanban", label: "Agent Kanban", icon: <LayoutDashboard size={18} />,                accent: "#7dd3fc", dim: "rgba(125,211,252,0.16)" },
   // Personal
   { href: "/loop",     label: "Loop",     icon: <Repeat size={16} />,   accent: "#2dd4bf", dim: "rgba(45,212,191,0.16)" },
@@ -64,7 +65,7 @@ const LS_HIDDEN = "agentos.sidebar.hidden";
 // Sidebar grouping. Mission Control sits under the top "Workspace" header;
 // Paperclip + AI Agent Mastermind + Pipeline + Agent Kanban get their own "Agent Orchestration" group;
 // the model agents under "Agents"; everything else under "Self".
-const ORCHESTRATION_ROUTES = new Set(["/paperclip", "/room", "/pipeline", "/agent-kanban"]);
+const ORCHESTRATION_ROUTES = new Set(["/paperclip", "/room", "/pipeline", "/agent-kanban", "/fleet"]);
 function sectionOf(href: string): string {
   if (href === "/") return "Workspace";
   if (ORCHESTRATION_ROUTES.has(href)) return "Agent Orchestration";

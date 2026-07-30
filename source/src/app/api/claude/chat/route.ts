@@ -39,7 +39,8 @@ function buildPromptWithHistory(history: ChatMsg[], current: string): string {
 }
 
 export async function POST(req: Request) {
-  const { prompt, cwd, ultracode, project, resumeRunId, history } = await req.json();
+  const { prompt, cwd, ultracode, project, resumeRunId, history, permissionMode } =
+    await req.json();
   if (typeof prompt !== "string" || prompt.length === 0) {
     return new Response("missing prompt", { status: 400 });
   }
@@ -80,6 +81,18 @@ export async function POST(req: Request) {
   const args: string[] = ["-p", "--model", CLAUDE_MODEL];
   if (resumeSessionId) args.push("--resume", resumeSessionId);
   if (isUltra) args.push("--effort", "xhigh", "--include-hook-events");
+
+  // Permission mode. Allow-listed rather than passed through, so a malformed
+  // client can't inject an arbitrary flag — and note that "bypassPermissions"
+  // maps to --dangerously-skip-permissions, which turns off every check.
+  const MODES: Record<string, string[]> = {
+    default: ["--permission-mode", "default"],
+    plan: ["--permission-mode", "plan"],
+    acceptEdits: ["--permission-mode", "acceptEdits"],
+    dontAsk: ["--permission-mode", "dontAsk"],
+    bypassPermissions: ["--dangerously-skip-permissions"],
+  };
+  args.push(...(MODES[permissionMode] ?? MODES.acceptEdits));
   args.push(
     "--output-format=stream-json",
     "--include-partial-messages",
