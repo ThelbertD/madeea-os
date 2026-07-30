@@ -747,14 +747,22 @@
 
           push({ type: 'system', subtype: 'init' });
           var body = {
-            model: cfg.model, stream: true, max_tokens: 8000,
+            // The pack defines several deliverables. Asking for only the article
+            // threw the rest away on the published page, while the local install
+            // produced all of them.
+            model: cfg.model, stream: true, max_tokens: 32000,
             messages: [
               { role: 'system', content: snap.skill },
               { role: 'user', content:
                 'Target keyword: ' + keyword + '\nFile slug: ' + slug + '\n' +
                 (transcript ? '\n<transcript>\n' + transcript + '\n</transcript>\n' : '') +
-                '\nWrite ONE article now, following the skill exactly. ' +
-                'Output only the markdown file contents, starting with the YAML frontmatter.' }
+                '\nProduce every deliverable the skill defines, following it exactly.\n\n' +
+                'There is no filesystem here, so instead of writing files, output them one ' +
+                'after another in a single reply. Precede each with a line of exactly this ' +
+                'form, with nothing else on that line:\n\n' +
+                '=== FILE: <filename> ===\n\n' +
+                'Use the filenames the skill specifies, using this run' + String.fromCharCode(39) + 's slug. ' +
+                'Output no commentary before the first marker or after the last file.' }
             ]
           };
           var article = '';
@@ -821,17 +829,28 @@
           seoStore('sessions', seoStore('sessions', []).map(function (s) {
             return s.id === session.id ? session : s; }), true);
 
-          // No filesystem here, so hand the file over instead of pretending it landed.
+          // No filesystem here, so hand the whole set over as one zip rather than
+          // pretending the files landed. One download, not five, because browsers
+          // block successive programmatic downloads.
           try {
-            var blob = new Blob([article], { type: 'text/markdown' });
+            var files = splitDeliverables(article, slug);
             var a = document.createElement('a');
-            a.href = URL.createObjectURL(blob); a.download = slug + '.md';
+            if (files.length > 1) {
+              a.href = URL.createObjectURL(zipStore(files));
+              a.download = slug + '.zip';
+            } else {
+              a.href = URL.createObjectURL(new Blob([files[0].text], { type: 'text/markdown' }));
+              a.download = files[0].name;
+            }
             document.body.appendChild(a); a.click(); a.remove();
-            push({ type: 'result', result: 'Wrote ' + slug + '.md (' + article.length +
-                   ' chars) and downloaded it. A web page cannot write into your site repo — ' +
-                   'drop the file into its posts folder.' });
+            push({ type: 'result', result:
+              'Produced ' + files.length + ' file' + (files.length === 1 ? '' : 's') + ': ' +
+              files.map(function (f) { return f.name + ' (' + f.text.length + ' chars)'; }).join(', ') +
+              '. Downloaded as ' + a.download + '. A web page cannot write into your site repo, ' +
+              'so unzip it and drop the article into its posts folder.' });
           } catch (e) {
-            push({ type: 'result', result: 'Article generated (' + article.length + ' chars).' });
+            push({ type: 'result', result: 'Generated ' + article.length +
+                   ' chars but could not package it: ' + String((e && e.message) || e) });
           }
           push({ type: 'done', code: 0, sessionId: session.id });
           try { c.close(); } catch (e) {}
@@ -869,6 +888,65 @@
   }
 
   /* ── SEO helpers ──────────────────────────────────────────────────── */
+
+  /* A published page has no filesystem, so the pack's five deliverables cannot
+     be written where they belong. Hand over a zip instead of silently dropping
+     four of them. Store-only (no compression) keeps this to a few lines and
+     every unzip tool reads it; markdown compresses well but not usefully
+     enough to justify shipping an inflate implementation. */
+  var CRCT = null;
+  function crc32(buf) {
+    if (!CRCT) {
+      CRCT = new Uint32Array(256);
+      for (var i = 0; i < 256; i++) {
+        var c = i;
+        for (var k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+        CRCT[i] = c >>> 0;
+      }
+    }
+    var crc = 0xFFFFFFFF;
+    for (var n = 0; n < buf.length; n++) crc = CRCT[(crc ^ buf[n]) & 0xFF] ^ (crc >>> 8);
+    return (crc ^ 0xFFFFFFFF) >>> 0;
+  }
+
+  function zipStore(files) {
+    var enc = new TextEncoder(), parts = [], central = [], offset = 0;
+    var u16 = function (v) { return [v & 255, (v >>> 8) & 255]; };
+    var u32 = function (v) { return [v & 255, (v >>> 8) & 255, (v >>> 16) & 255, (v >>> 24) & 255]; };
+    files.forEach(function (f) {
+      var name = enc.encode(f.name), data = enc.encode(f.text);
+      var crc = crc32(data), len = data.length;
+      var lh = [0x50, 0x4b, 0x03, 0x04]
+        .concat(u16(20), u16(0), u16(0), u16(0), u16(0),
+                u32(crc), u32(len), u32(len), u16(name.length), u16(0));
+      parts.push(new Uint8Array(lh), name, data);
+      var ch = [0x50, 0x4b, 0x01, 0x02]
+        .concat(u16(20), u16(20), u16(0), u16(0), u16(0), u16(0),
+                u32(crc), u32(len), u32(len),
+                u16(name.length), u16(0), u16(0), u16(0), u16(0), u32(0), u32(offset));
+      central.push(new Uint8Array(ch), name);
+      offset += lh.length + name.length + len;
+    });
+    var cdSize = central.reduce(function (a, b) { return a + b.length; }, 0);
+    var eocd = new Uint8Array([0x50, 0x4b, 0x05, 0x06]
+      .concat(u16(0), u16(0), u16(files.length), u16(files.length),
+              u32(cdSize), u32(offset), u16(0)));
+    return new Blob(parts.concat(central, [eocd]), { type: 'application/zip' });
+  }
+
+  // Split the model's reply on the "=== FILE: name ===" markers the prompt asks
+  // for. If it ignored them, treat the whole reply as the article rather than
+  // losing the run.
+  function splitDeliverables(text, slug) {
+    var re = /^===\s*FILE:\s*(\S+?)\s*===\s*$/gm, out = [], m, last = null;
+    while ((m = re.exec(text)) !== null) {
+      if (last) out.push({ name: last.name, text: text.slice(last.at, m.index).trim() });
+      last = { name: m[1], at: re.lastIndex };
+    }
+    if (last) out.push({ name: last.name, text: text.slice(last.at).trim() });
+    if (!out.length) out.push({ name: slug + '.md', text: text.trim() });
+    return out.filter(function (f) { return f.text.length > 40; });
+  }
 
   var SEOSNAP = null;
   function seoSnap() {
@@ -966,7 +1044,7 @@
   /* ── Video Editor engine ──────────────────────────────────────────── */
 
   var VUSTATE = {};            // per-job transient run state
-  var VUURLS = {};             // "job rel" → object URL
+  var VUURLS = {};             // "job\u0000rel" → object URL
 
   function vuJobs() { return store.get('vuJobs', []); }
   function vuSave(v) { store.set('vuJobs', v); }
@@ -981,7 +1059,7 @@
     }).catch(function () { return null; });
   }
   async function vuBlobURL(job, rel) {
-    var k = job + ' ' + rel;
+    var k = job + '\u0000' + rel;
     if (VUURLS[k]) return VUURLS[k];
     var blob = await vuGet(job, rel);
     if (!blob) return '';
@@ -1135,7 +1213,7 @@
       var out = new Blob(chunks, { type: vMime() || 'video/webm' });
       if (!out.size) throw new Error('recorder produced no data');
       await vuPut(job, 'edit/final.mp4', out);
-      delete VUURLS[job + ' edit/final.mp4'];
+      delete VUURLS[job + '\u0000edit/final.mp4'];
 
       var removed = dur - total;
       return {
