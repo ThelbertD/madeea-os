@@ -630,233 +630,126 @@
       return json({ q: url.searchParams.get('q') || '', notes: out.slice(0, 60) });
     },
 
-    /* ── SEO pipeline, without a server ───────────────────────────────
-       On a static host there is no filesystem to read packs/ from and no
-       Claude CLI to spawn, so every SEO tab came back empty.
+    /* ── D Express content agent, without a server ────────────────────
+       The SEO pipeline this replaces was the pack author's own funnel. The
+       page now renders the content agent, which on a server reads its 14
+       agent briefs from packs/ and calls OmniRoute. A published page has
+       neither, so the briefs come from a bundled snapshot and model calls go
+       straight from the browser to an OpenAI-compatible endpoint using a key
+       the operator supplies. The library lives in this browser. */
 
-       Sites, Skill, Transcripts and History need no model at all — serve
-       them from the bundled snapshot plus browser storage. Generate does
-       need one; it calls an OpenAI-compatible endpoint with a key the
-       operator supplies, kept in this browser and never committed. The
-       article is offered as a download, since a web page cannot write into
-       a site repo. */
-
-    'seo/sites': async function () {
-      var s = await seoSnap();
-      var posts = seoStore('articles', []);
+    'dexpress/agents': async function () {
+      var s = await dxSnap();
+      var list = (s && s.agents) || [];
       return json({
-        sites: ((s && s.sites) || []).map(function (site) {
-          var mine = posts.filter(function (p) { return p.siteId === site.id; });
-          return {
-            site: { id: site.id, name: site.name, url: site.url, path: '(browser)', postsDir: '(browser)' },
-            postCount: mine.length,
-            recent: mine.slice(-6).reverse().map(function (p) {
-              return { slug: p.slug, mtime: p.mtime, title: p.title };
-            })
-          };
+        count: list.length,
+        agents: list.map(function (a) {
+          return { id: a.id, name: a.name, description: a.description, chars: (a.instructions || '').length };
         })
       });
     },
 
-    'seo/skill': async function () {
-      var s = await seoSnap();
-      if (!s || !s.skill) return new Response('# no pack bundled', { status: 404 });
-      return new Response(s.skill, { headers: { 'Content-Type': 'text/markdown; charset=utf-8' } });
-    },
-
-    'seo/history': async function () {
-      return json({ sessions: seoStore('sessions', []).slice().reverse(), deploys: [] });
-    },
-
-    'seo/transcripts': async function () {
-      return json({ transcripts: seoStore('transcripts', []) });
-    },
-
-    'seo/transcript': async function (req, url) {
-      var slug = url.searchParams.get('slug') || '';
-      var t = seoStore('transcripts', []).filter(function (x) { return x.slug === slug; })[0];
-      return json(t ? { slug: slug, text: t.text } : { error: 'not found' }, t ? 200 : 404);
-    },
-
-    'seo/transcript/save': async function (req) {
-      var b = await req.json().catch(function () { return {}; });
-      var slug = String(b.slug || '').replace(/[^A-Za-z0-9_-]/g, '') || 'transcript';
-      var text = String(b.text || '');
-      var list = seoStore('transcripts', []).filter(function (t) { return t.slug !== slug; });
-      list.unshift({ slug: slug, text: text, bytes: text.length, mtime: Date.now(),
-                     preview: text.slice(0, 220).replace(/\s+/g, ' ').trim() });
-      seoStore('transcripts', list, true);
-      return json({ ok: true, slug: slug });
-    },
-
-    'seo/generate': async function (req) {
-      var b = await req.json().catch(function () { return {}; });
-      var keyword = String(b.keyword || '').trim();
-      var slug = String(b.slug || '').trim();
-      if (!keyword || !/^[a-z0-9-]{3,80}$/.test(slug)) {
-        return new Response('missing keyword or invalid slug', { status: 400 });
+    'dexpress/library': async function (req, url) {
+      if (req.method === 'DELETE') {
+        var id = url.searchParams.get('id') || '';
+        var kept = seoStore('items', []).filter(function (i) { return i.id !== id; });
+        seoStore('items', kept, true);
+        return json({ ok: true });
       }
-      var snap = await seoSnap();
-      if (!snap || !snap.skill) return new Response('no pack bundled', { status: 500 });
-
-      var transcript = '';
-      if (b.transcriptText) transcript = String(b.transcriptText);
-      else if (b.transcriptSlug) {
-        var t = seoStore('transcripts', []).filter(function (x) { return x.slug === b.transcriptSlug; })[0];
-        if (t) transcript = t.text;
-      }
-
-      var cfg = seoKeyConfig();
-      var enc = new TextEncoder();
-      return new Response(new ReadableStream({
-        async start(c) {
-          var push = function (o) { try { c.enqueue(enc.encode(JSON.stringify(o) + '\n')); } catch (e) {} };
-          if (!cfg.key) {
-            // Telling someone to hand-edit a query string is a dead end. Ask
-            // for the key here, save it, and carry straight on.
-            var typed = null;
-            try {
-              typed = window.prompt(
-                'Generation needs a model API key.\n\n' +
-                'A published page has no server, so the request goes straight from this ' +
-                'browser to the provider. The key is saved in this browser only — never ' +
-                'uploaded or committed.\n\n' +
-                'Paste an OpenRouter key (openrouter.ai/keys), or any OpenAI-compatible key:'
-              );
-            } catch (e) {}
-            if (typed && typed.trim()) {
-              store.set('seo.key', typed.trim());
-              cfg = seoKeyConfig();
-            } else {
-              push({ type: 'stderr', text:
-                'No API key set for this browser.\n\n' +
-                'Generation needs a model, and a published page has no server to run one. ' +
-                'Everything else here — Sites, Skill, Transcripts, History — works without it.\n\n' +
-                'Run Generate again to be asked for a key, or add ?seokey=YOUR_KEY to this ' +
-                'URL. Defaults to OpenRouter; add &seobase=https://host/v1 and &seomodel=NAME ' +
-                'for another OpenAI-compatible provider. Stored in this browser only.\n' });
-              push({ type: 'done', code: 1 });
-              try { c.close(); } catch (e) {}
-              return;
-            }
-          }
-          var session = { id: 'ss-' + Date.now().toString(36), createdAt: Date.now(),
-                          keyword: keyword, slug: slug, status: 'running',
-                          transcriptSource: transcript ? '(provided)' : '(none)', articles: [] };
-          var sessions = seoStore('sessions', []); sessions.push(session); seoStore('sessions', sessions, true);
-
-          push({ type: 'system', subtype: 'init' });
-          var body = {
-            // The pack defines several deliverables. Asking for only the article
-            // threw the rest away on the published page, while the local install
-            // produced all of them.
-            model: cfg.model, stream: true, max_tokens: 32000,
-            messages: [
-              { role: 'system', content: snap.skill },
-              { role: 'user', content:
-                'Target keyword: ' + keyword + '\nFile slug: ' + slug + '\n' +
-                (transcript ? '\n<transcript>\n' + transcript + '\n</transcript>\n' : '') +
-                '\nProduce every deliverable the skill defines, following it exactly.\n\n' +
-                'There is no filesystem here, so instead of writing files, output them one ' +
-                'after another in a single reply. Precede each with a line of exactly this ' +
-                'form, with nothing else on that line:\n\n' +
-                '=== FILE: <filename> ===\n\n' +
-                'Use the filenames the skill specifies, using this run' + String.fromCharCode(39) + 's slug. ' +
-                'Output no commentary before the first marker or after the last file.' }
-            ]
-          };
-          var article = '';
-          try {
-            var endpoint = cfg.base + '/chat/completions';
-            var r = await nativeFetch(endpoint, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                Authorization: 'Bearer ' + cfg.key,
-                // OpenRouter attributes browser traffic with these; harmless
-                // elsewhere and some gateways reject unattributed requests.
-                'HTTP-Referer': location.origin,
-                'X-Title': 'MadeEA OS'
-              },
-              body: JSON.stringify(body)
-            });
-            if (!r.ok) {
-              var detail = (await r.text()).slice(0, 300);
-              // A stored key that the provider rejects used to be a dead end:
-              // the prompt only appears when nothing is stored, so a wrong key
-              // meant the same 401 forever with no way to replace it. Drop it
-              // so the next run asks again.
-              if (r.status === 401 || r.status === 403) {
-                store.set('seo.key', '');
-                detail += '\n\nThat key was rejected, so it has been cleared — run Generate again to enter a different one.';
-              }
-              throw new Error('HTTP ' + r.status + ' from ' + endpoint
-                + '\nmodel: ' + cfg.model + '\n' + detail);
-            }
-            var reader = r.body.getReader(), dec = new TextDecoder(), buf = '';
-            while (true) {
-              var res = await reader.read();
-              if (res.done) break;
-              buf += dec.decode(res.value, { stream: true });
-              var lines = buf.split('\n'); buf = lines.pop() || '';
-              for (var i = 0; i < lines.length; i++) {
-                var ln = lines[i].trim();
-                if (ln.indexOf('data:') !== 0) continue;
-                var payload = ln.slice(5).trim();
-                if (payload === '[DONE]') continue;
-                try {
-                  var d = JSON.parse(payload);
-                  var piece = d.choices && d.choices[0] && d.choices[0].delta && d.choices[0].delta.content;
-                  if (piece) { article += piece; push({ type: 'stream_event', event: { delta: { text: piece } } }); }
-                } catch (e) {}
-              }
-            }
-          } catch (e) {
-            push({ type: 'stderr', text: String((e && e.message) || e) + '\n' });
-            session.status = 'failed'; seoStore('sessions', seoStore('sessions', []).map(function (s) {
-              return s.id === session.id ? session : s; }), true);
-            push({ type: 'done', code: 1 }); try { c.close(); } catch (e2) {} return;
-          }
-
-          var title = (article.match(/^title:\s*["']?(.+?)["']?\s*$/m) || [])[1] || slug;
-          var siteId = (snap.sites[0] || {}).id || 'site';
-          var arts = seoStore('articles', []);
-          arts.push({ siteId: siteId, slug: slug, title: title, mtime: Date.now(), body: article });
-          seoStore('articles', arts, true);
-          session.status = 'completed';
-          session.articles = [{ siteId: siteId, filePath: slug + '.md',
-                                liveUrl: ((snap.sites[0] || {}).url || '') + '/blog/' + slug + '/' }];
-          seoStore('sessions', seoStore('sessions', []).map(function (s) {
-            return s.id === session.id ? session : s; }), true);
-
-          // No filesystem here, so hand the whole set over as one zip rather than
-          // pretending the files landed. One download, not five, because browsers
-          // block successive programmatic downloads.
-          try {
-            var files = splitDeliverables(article, slug);
-            var a = document.createElement('a');
-            if (files.length > 1) {
-              a.href = URL.createObjectURL(zipStore(files));
-              a.download = slug + '.zip';
-            } else {
-              a.href = URL.createObjectURL(new Blob([files[0].text], { type: 'text/markdown' }));
-              a.download = files[0].name;
-            }
-            document.body.appendChild(a); a.click(); a.remove();
-            push({ type: 'result', result:
-              'Produced ' + files.length + ' file' + (files.length === 1 ? '' : 's') + ': ' +
-              files.map(function (f) { return f.name + ' (' + f.text.length + ' chars)'; }).join(', ') +
-              '. Downloaded as ' + a.download + '. A web page cannot write into your site repo, ' +
-              'so unzip it and drop the article into its posts folder.' });
-          } catch (e) {
-            push({ type: 'result', result: 'Generated ' + article.length +
-                   ' chars but could not package it: ' + String((e && e.message) || e) });
-          }
-          push({ type: 'done', code: 0, sessionId: session.id });
-          try { c.close(); } catch (e) {}
-        }
-      }), { headers: { 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Cache-Control': 'no-cache' } });
+      var kind = url.searchParams.get('kind');
+      var items = seoStore('items', []);
+      return json({ items: kind ? items.filter(function (i) { return i.kind === kind; }) : items });
     },
+
+    'dexpress/chat': async function (req) {
+      var b = await req.json().catch(function () { return {}; });
+      var agent = await dxAgent(String(b.agentId || ''));
+      if (!agent) return json({ error: 'unknown agent' }, 400);
+      if (!Array.isArray(b.messages) || !b.messages.length) return json({ error: 'need messages' }, 400);
+      var cfg = await dxKey();
+      if (!cfg) return json({ error: dxNoKeyMessage() }, 400);
+      // Same folding as the server route: one prompt is handled far more
+      // reliably by these models than a long multi-turn array.
+      var history = b.messages.slice(-10).map(function (m) {
+        return (m.role === 'assistant' ? 'You: ' : 'User: ') + String(m.content || '').slice(0, 4000);
+      }).join('\n\n');
+      try {
+        var text = await dxComplete(cfg, agent.instructions, history, 2000);
+        return new Response(text, { headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
+      } catch (e) { return json({ error: String((e && e.message) || e) }, 502); }
+    },
+
+    'dexpress/titles': async function (req) {
+      var b = await req.json().catch(function () { return {}; });
+      var keywords = String(b.keywords || '').trim();
+      if (!keywords) return json({ error: 'need keywords' }, 400);
+      var agent = await dxAgent('seo_optimizer');
+      if (!agent) return json({ error: 'seo_optimizer missing from the bundled pack' }, 503);
+      var cfg = await dxKey();
+      if (!cfg) return json({ error: dxNoKeyMessage() }, 400);
+      var user = 'Based on these SEO keywords, generate 5 engaging, SEO-friendly blog post titles.\n\n'
+        + 'Keywords: ' + keywords + '\n\n'
+        + 'Each must support a 1500-1800 word article. Keep each under 60 characters where possible.\n'
+        + 'Reply with JSON only: {"titles": ["...", "...", "...", "...", "..."]}';
+      var text;
+      try { text = await dxComplete(cfg, agent.instructions + '\n\nYou are generating blog post titles.', user, 1200); }
+      catch (e) { return json({ error: String((e && e.message) || e) }, 502); }
+
+      var titles = [];
+      var m = text.match(/\{[\s\S]*\}/);
+      if (m) { try { titles = JSON.parse(m[0]).titles || []; } catch (e) {} }
+      if (!titles.length) {
+        titles = text.split('\n').map(function (l) {
+          return l.replace(/^\s*(?:\d+[.)]|[-*])\s*/, '').replace(/^["']|["']$/g, '').trim();
+        }).filter(function (l) { return l.length > 12 && l.length < 120; }).slice(0, 5);
+      }
+      if (!titles.length) return json({ error: 'no titles in reply' }, 502);
+      if (b.save) {
+        var items = seoStore('items', []);
+        titles.forEach(function (t, i) {
+          items.unshift({ id: 'dx-' + Date.now().toString(36) + '-' + i, kind: 'title',
+                          keyword: keywords, title: t, body: t, agentId: 'seo_optimizer',
+                          createdAt: Date.now() });
+        });
+        seoStore('items', items, true);
+      }
+      return json({ titles: titles });
+    },
+
+    'dexpress/article': async function (req) {
+      var b = await req.json().catch(function () { return {}; });
+      var title = String(b.title || '').trim();
+      if (!title) return json({ error: 'need a title' }, 400);
+      var writer = await dxAgent(String(b.agentId || 'blog_content_writer'));
+      var seo = await dxAgent('seo_optimizer');
+      if (!writer) return json({ error: 'blog_content_writer missing from the bundled pack' }, 503);
+      var cfg = await dxKey();
+      if (!cfg) return json({ error: dxNoKeyMessage() }, 400);
+
+      var system = writer.instructions
+        + (seo ? '\n\n---\nSEO requirements:\n\n' + seo.instructions : '')
+        + '\n\n---\n' + DX_SPEC;
+      var user = 'Blog post title: "' + title + '"\n'
+        + (b.keywords ? 'Primary keywords: ' + String(b.keywords).trim() + '\n' : '')
+        + (b.transcript ? '\n<transcript>\n' + String(b.transcript).slice(0, 100000) + '\n</transcript>\n' : '')
+        + '\nWrite the full article now. Output only the markdown file contents.';
+
+      var body;
+      try { body = await dxComplete(cfg, system, user, 16000); }
+      catch (e) { return json({ error: String((e && e.message) || e) }, 502); }
+
+      var wc = dxWordCount(body);
+      var slug = vSlug(title);
+      var item = { id: 'dx-' + Date.now().toString(36), kind: 'article', keyword: String(b.keywords || '').trim(),
+                   title: title, slug: slug, body: body, agentId: writer.id,
+                   createdAt: Date.now(), wordCount: wc };
+      var items = seoStore('items', []);
+      items.unshift(item);
+      seoStore('items', items, true);
+      // Report our own count, not the model's frontmatter — it under-reports.
+      return json({ item: item, wordCount: wc, withinSpec: wc >= 1500 && wc <= 1800, slug: slug });
+    },
+
 
     'memory/note': async function (req, url) {
       var s = await memSnap();
@@ -887,75 +780,111 @@
     return MEMSNAP;
   }
 
-  /* ── SEO helpers ──────────────────────────────────────────────────── */
+  /* ── D Express content agent helpers ─────────────────────────────── */
 
-  /* A published page has no filesystem, so the pack's five deliverables cannot
-     be written where they belong. Hand over a zip instead of silently dropping
-     four of them. Store-only (no compression) keeps this to a few lines and
-     every unzip tool reads it; markdown compresses well but not usefully
-     enough to justify shipping an inflate implementation. */
-  var CRCT = null;
-  function crc32(buf) {
-    if (!CRCT) {
-      CRCT = new Uint32Array(256);
-      for (var i = 0; i < 256; i++) {
-        var c = i;
-        for (var k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
-        CRCT[i] = c >>> 0;
-      }
-    }
-    var crc = 0xFFFFFFFF;
-    for (var n = 0; n < buf.length; n++) crc = CRCT[(crc ^ buf[n]) & 0xFF] ^ (crc >>> 8);
-    return (crc ^ 0xFFFFFFFF) >>> 0;
-  }
+  // The article spec, same as the server route: ArticleGenerator.jsx's rules.
+  var DX_SPEC = [
+    'Length is a hard requirement: minimum 1500 words, maximum 1800. Target 1650.',
+    'Count prose only. Runs overshoot or fall short, so count before finishing.',
+    '',
+    'Structure:',
+    '- Introduction, 150-200 words.',
+    '- 6-8 sections, each an H2, 200-250 words each, every one carrying a specific',
+    '  example, actionable tip or detailed explanation.',
+    '- A "Frequently Asked Questions" section immediately before the conclusion:',
+    '  exactly 5 questions as H3, each answered in 50-100 words.',
+    '- Conclusion with a clear call to action, 100-150 words.',
+    '',
+    'Output markdown with YAML frontmatter: title (50-60 chars, keyword-led),',
+    'description (150-160 chars), keywords, date, author, word_count. Then the body',
+    '- do not repeat the title as an H1 - then a JSON-LD block covering',
+    'LocalBusiness, Service and FAQPage.',
+    '',
+    'US English. Never invent reviews, ratings, statistics or awards; the only',
+    'credentials you may claim are the ones in your brief.'
+  ].join('\n');
 
-  function zipStore(files) {
-    var enc = new TextEncoder(), parts = [], central = [], offset = 0;
-    var u16 = function (v) { return [v & 255, (v >>> 8) & 255]; };
-    var u32 = function (v) { return [v & 255, (v >>> 8) & 255, (v >>> 16) & 255, (v >>> 24) & 255]; };
-    files.forEach(function (f) {
-      var name = enc.encode(f.name), data = enc.encode(f.text);
-      var crc = crc32(data), len = data.length;
-      var lh = [0x50, 0x4b, 0x03, 0x04]
-        .concat(u16(20), u16(0), u16(0), u16(0), u16(0),
-                u32(crc), u32(len), u32(len), u16(name.length), u16(0));
-      parts.push(new Uint8Array(lh), name, data);
-      var ch = [0x50, 0x4b, 0x01, 0x02]
-        .concat(u16(20), u16(20), u16(0), u16(0), u16(0), u16(0),
-                u32(crc), u32(len), u32(len),
-                u16(name.length), u16(0), u16(0), u16(0), u16(0), u32(0), u32(offset));
-      central.push(new Uint8Array(ch), name);
-      offset += lh.length + name.length + len;
-    });
-    var cdSize = central.reduce(function (a, b) { return a + b.length; }, 0);
-    var eocd = new Uint8Array([0x50, 0x4b, 0x05, 0x06]
-      .concat(u16(0), u16(0), u16(files.length), u16(files.length),
-              u32(cdSize), u32(offset), u16(0)));
-    return new Blob(parts.concat(central, [eocd]), { type: 'application/zip' });
-  }
-
-  // Split the model's reply on the "=== FILE: name ===" markers the prompt asks
-  // for. If it ignored them, treat the whole reply as the article rather than
-  // losing the run.
-  function splitDeliverables(text, slug) {
-    var re = /^===\s*FILE:\s*(\S+?)\s*===\s*$/gm, out = [], m, last = null;
-    while ((m = re.exec(text)) !== null) {
-      if (last) out.push({ name: last.name, text: text.slice(last.at, m.index).trim() });
-      last = { name: m[1], at: re.lastIndex };
-    }
-    if (last) out.push({ name: last.name, text: text.slice(last.at).trim() });
-    if (!out.length) out.push({ name: slug + '.md', text: text.trim() });
-    return out.filter(function (f) { return f.text.length > 40; });
-  }
-
-  var SEOSNAP = null;
-  function seoSnap() {
-    if (SEOSNAP) return SEOSNAP;
-    SEOSNAP = nativeFetch(memBase() + '/seo-snapshot.json', { cache: 'force-cache' })
+  var DXSNAP = null;
+  function dxSnap() {
+    if (DXSNAP) return DXSNAP;
+    DXSNAP = nativeFetch(memBase() + '/dexpress-snapshot.json', { cache: 'force-cache' })
       .then(function (r) { return r.ok ? r.json() : null; })
       .catch(function () { return null; });
-    return SEOSNAP;
+    return DXSNAP;
   }
+
+  async function dxAgent(id) {
+    var s = await dxSnap();
+    if (!s || !s.agents) return null;
+    return s.agents.filter(function (a) { return a.id === id; })[0] || null;
+  }
+
+  function dxWordCount(md) {
+    var body = md.replace(/^---[\s\S]*?---/, '')
+                 .replace(/```[\s\S]*?```/g, '')
+                 .replace(/<script[\s\S]*?<\/script>/g, '');
+    return (body.match(/\b[\w']+\b/g) || []).length;
+  }
+
+  function dxNoKeyMessage() {
+    return 'No API key set for this browser.\n\n'
+      + 'A published page has no server, so a model call goes straight from here to '
+      + 'the provider and needs a key. Run this again to be asked for one, or add '
+      + '?seokey=YOUR_KEY to the URL. Defaults to OpenRouter; ?seoreset=1 clears it. '
+      + 'Stored in this browser only.';
+  }
+
+  // Ask once, keep it, and clear it again if the provider rejects it — a stored
+  // bad key used to be unrecoverable because the prompt only showed when
+  // nothing was stored.
+  async function dxKey() {
+    var cfg = seoKeyConfig();
+    if (cfg.key) return cfg;
+    var typed = null;
+    try {
+      typed = window.prompt(
+        'This needs a model API key.\n\n' +
+        'A published page has no server, so the request goes from this browser ' +
+        'straight to the provider. The key is saved in this browser only — never ' +
+        'uploaded or committed.\n\n' +
+        'Paste an OpenRouter key (openrouter.ai/keys), or any OpenAI-compatible key:'
+      );
+    } catch (e) {}
+    if (typed && typed.trim()) { store.set('seo.key', typed.trim()); return seoKeyConfig(); }
+    return null;
+  }
+
+  async function dxComplete(cfg, system, user, maxTokens) {
+    var endpoint = cfg.base + '/chat/completions';
+    var r = await nativeFetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer ' + cfg.key,
+        'HTTP-Referer': location.origin,
+        'X-Title': 'MadeEA OS'
+      },
+      body: JSON.stringify({
+        model: cfg.model, stream: false, max_tokens: maxTokens || 8000, temperature: 0.7,
+        messages: [{ role: 'system', content: system }, { role: 'user', content: user }]
+      })
+    });
+    if (!r.ok) {
+      var detail = (await r.text()).slice(0, 300);
+      if (r.status === 401 || r.status === 403) {
+        store.set('seo.key', '');
+        detail += '\n\nThat key was rejected, so it has been cleared — try again to enter another.';
+      }
+      throw new Error('HTTP ' + r.status + ' from ' + endpoint + '\nmodel: ' + cfg.model + '\n' + detail);
+    }
+    var j = await r.json();
+    var text = j && j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content;
+    if (typeof text !== 'string' || !text.trim()) throw new Error('the model returned nothing');
+    return text;
+  }
+
+  /* ── SEO helpers ──────────────────────────────────────────────────── */
+
 
   // Sessions, transcripts and generated articles live in localStorage — small,
   // synchronous, and they survive a reload.
