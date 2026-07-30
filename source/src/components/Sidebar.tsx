@@ -122,7 +122,7 @@ export default function Sidebar() {
   return (
     <aside className="hidden md:flex flex-col w-[244px] shrink-0 h-screen overflow-hidden py-6 border-r border-[var(--line-soft)]"
            style={{ background: "var(--bg-mid)" }}>
-      <Link href="/" className="block mb-7 px-5 shrink-0">
+      <Link href="/" prefetch={false} className="block mb-7 px-5 shrink-0">
         <div className="text-[10px] uppercase tracking-[0.25em] mb-1" style={{ color: "var(--cream-mute)", fontFamily: "'Manrope', sans-serif", fontWeight: 600 }}>
           Local · Studio
         </div>
@@ -218,6 +218,7 @@ export default function Sidebar() {
                 </div>
               ) : (
                 <Link
+                  prefetch={false}
                   href={href}
                   className={`sidebar-item relative group flex items-center gap-3 py-2.5 px-5 ${active ? "active" : ""}`}
                 >
@@ -274,6 +275,7 @@ export function MobileNav() {
         return (
           <Link
             key={item.href}
+            prefetch={false}
             href={item.href}
             className="grid place-items-center w-10 h-10 rounded-lg transition"
             style={{

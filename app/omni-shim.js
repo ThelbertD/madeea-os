@@ -119,8 +119,21 @@
 
   var bridgeUp = null;                       // null = unknown, true/false once probed
 
+  function isRemoteBridge() { return /^https:/i.test(BRIDGE); }
+
+  /* A published https page cannot reach http://localhost at all — Chrome's
+     Private Network Access check refuses it before the request leaves, so no
+     header on the gateway can help. Attempting it anyway filled the console
+     with ERR_CONNECTION_REFUSED for every probe, which reads like a broken
+     app rather than "this machine isn't the one serving the gateway".
+     Unless a tunnelled bridge is configured, don't try. */
+  function localBlocked() {
+    return location.protocol === 'https:' && !isRemoteBridge();
+  }
+
   async function haveBridge() {
     if (bridgeUp !== null) return bridgeUp;
+    if (localBlocked()) { bridgeUp = false; return bridgeUp; }
     try {
       var r = await nativeFetch(BRIDGE + '/health', bridgeInit({ signal: AbortSignal.timeout(6000) }));
       bridgeUp = r.ok;
@@ -128,12 +141,14 @@
     return bridgeUp;
   }
 
-  function isRemoteBridge() { return /^https:/i.test(BRIDGE); }
-
   function gw(path, init) {
     // A tunnelled bridge is the only route that works from a public origin, so
     // when one is configured go straight there rather than failing first.
     if (isRemoteBridge()) return nativeFetch(BRIDGE + '/omni' + path, bridgeInit(init));
+    if (localBlocked()) {
+      explain(new Error('this page is served over https, so the browser will not call localhost'));
+      return Promise.reject(new Error('local gateway unreachable from a published page'));
+    }
     return nativeFetch(GATEWAY.replace(/\/+$/, '') + path, init).catch(async function (err) {
       if (await haveBridge()) return nativeFetch(BRIDGE + '/omni' + path, bridgeInit(init));
       throw err;
@@ -156,10 +171,14 @@
     );
     if (pna) {
       console.warn(
-        'This page is https and the gateway is http://localhost. If OmniRoute IS running, ' +
-        'your browser is blocking the call (Private Network Access). Two ways round it:\n' +
-        '  1. Open this app from your own machine instead of GitHub Pages.\n' +
-        '  2. Chrome → chrome://flags → "Block insecure private network requests" → Disabled.'
+        'Expected on a published page: an https origin is not allowed to call ' +
+        'http://localhost (Private Network Access), so the OmniRoute-backed views ' +
+        '(chat, agent room, OmniRoute status) stay idle here.\n' +
+        'Video, OpenMontage, Video Editor, Memory and SEO do not use it and work ' +
+        'normally on this page.\n' +
+        'To use the gateway too, either open the app from the machine running it ' +
+        '(http://localhost:3000), or expose it over https and pass ' +
+        '?bridge=https://your-tunnel&t=TOKEN once.'
       );
     } else {
       console.warn('Start the gateway with:  npm install -g omniroute && omniroute');
