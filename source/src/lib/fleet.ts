@@ -7,6 +7,7 @@
 
 import { spawn, type ChildProcess } from "node:child_process";
 import { readFile, writeFile, mkdir, stat } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import path from "node:path";
 import os from "node:os";
 
@@ -15,6 +16,25 @@ const MAX_LOG_LINES = 500;
 const IS_WIN = process.platform === "win32";
 
 const home = (...parts: string[]) => path.join(os.homedir(), ...parts);
+
+// `omniroute` on PATH is a .ps1/.cmd shim. Spawned through cmd.exe it starts a
+// shell that exits without ever listening, so Fleet reported "starting" while
+// nothing came up on the port. Launch the package's real entry point with the
+// running node binary instead, and fall back to the bare name if the global
+// install is somewhere else.
+function omnirouteCommand(): string {
+  const entry = path.join(
+    process.env.APPDATA ?? home("AppData", "Roaming"),
+    "npm", "node_modules", "omniroute", "bin", "omniroute.mjs",
+  );
+  // DASHBOARD_PORT matters: OmniRoute's websocket server binds 0.0.0.0:3000,
+  // the same port this dashboard uses. Windows lets both listen — Next on ::
+  // and OmniRoute on 0.0.0.0 — so 127.0.0.1:3000 reached OmniRoute instead,
+  // and every dashboard call came back 401 AUTH_001 as though the app itself
+  // had broken. Move its dashboard aside; the gateway keeps 20128.
+  const prefix = IS_WIN ? "set DASHBOARD_PORT=3100&& " : "DASHBOARD_PORT=3100 ";
+  return prefix + (existsSync(entry) ? `"${process.execPath}" "${entry}"` : "omniroute");
+}
 
 export type FleetStatus = "online" | "starting" | "offline" | "error";
 
@@ -51,10 +71,18 @@ const DEFAULT_AGENTS: FleetAgent[] = [
     tagline: "Model router",
     icon: "Route",
     accent: "#2dd4bf",
-    cwd: home("omniroute"),
-    command: "npm run dev",
-    url: "http://localhost:8787",
-    healthUrl: "http://localhost:8787/health",
+    // OmniRoute installs as a global npm package, not a checkout, so there was
+    // no ~/omniroute to `npm run dev` in and Fleet could never start it. Run the
+    // installed binary instead — spawn already uses a shell, which is what makes
+    // the Windows .cmd shim resolve.
+    cwd: home(),
+    command: omnirouteCommand(),
+    // It listens on 20128, not 8787, and answers /v1/models rather than /health,
+    // so the old health check reported it down even while it was serving.
+    // 127.0.0.1 because localhost resolves to ::1 first on Windows and this
+    // gateway behaves differently over IPv6.
+    url: "http://127.0.0.1:20128",
+    healthUrl: "http://127.0.0.1:20128/v1/models",
     enabled: true,
   },
   {
