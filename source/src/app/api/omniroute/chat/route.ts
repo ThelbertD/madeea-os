@@ -10,7 +10,14 @@ export const dynamic = "force-dynamic";
 
 // 127.0.0.1, not localhost: over IPv6 this gateway answers 200 with an empty
 // completion instead of refusing, so callers saw success and no content.
-const BASE = "http://127.0.0.1:20128/v1";
+//
+// OMNIROUTE_BASE_URL overrides the host, which is what makes a hosted deploy
+// possible: on Vercel there is no gateway on 127.0.0.1 (that address is the
+// serverless function itself), so it must point at a reachable one. This used
+// to be hardcoded while status/route.ts already honoured the env var — setting
+// it produced a green status light with dead chat, which is worse than either
+// end being broken on its own.
+const BASE = `${(process.env.OMNIROUTE_BASE_URL || "http://127.0.0.1:20128").replace(/\/+$/, "")}/v1`;
 
 // Ordered free-model fallback chain. big-pickle is the proven worker; the free
 // providers here are all *reasoning* models, so we (a) steer them to answer
