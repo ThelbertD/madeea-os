@@ -15,8 +15,8 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
-import { KeyRound, Loader2, LogOut, Mail, ShieldCheck } from "lucide-react";
-import { clearConfig, getSupabase, readConfig, redirectTo, saveConfig } from "@/lib/supabaseClient";
+import { KeyRound, Loader2, LogOut, Mail } from "lucide-react";
+import { getSupabase, readConfig, redirectTo } from "@/lib/supabaseClient";
 
 const ACCENT = "#fd5812";
 
@@ -62,8 +62,7 @@ export default function LoginGate({ children }: { children: React.ReactNode }) {
     );
   }
 
-  if (!configured) return <SetupCard onSaved={() => { setConfigured(true); }} />;
-  if (!session) return <SignInCard />;
+  if (!session) return <SignInCard configured={configured} />;
 
   return (
     <>
@@ -73,46 +72,9 @@ export default function LoginGate({ children }: { children: React.ReactNode }) {
   );
 }
 
-/* ── first run: point it at a project ───────────────────────────────── */
-
-function SetupCard({ onSaved }: { onSaved: () => void }) {
-  const [url, setUrl] = useState("");
-  const [anonKey, setAnonKey] = useState("");
-  const [err, setErr] = useState<string | null>(null);
-
-  function save() {
-    const u = url.trim().replace(/\/+$/, "");
-    if (!/^https:\/\/[a-z0-9-]+\.supabase\.co$/i.test(u)) {
-      setErr("That doesn't look like a project URL — expected https://<project>.supabase.co");
-      return;
-    }
-    if (anonKey.trim().length < 40) { setErr("That anon key looks too short."); return; }
-    saveConfig({ url: u, anonKey });
-    onSaved();
-  }
-
-  return (
-    <Card title="Connect Supabase" icon={<ShieldCheck size={14} />}>
-      <p className="text-[11.5px] text-[var(--cream-mute)] leading-relaxed">
-        Paste your project URL and <strong>anon</strong> key — Settings → API in the Supabase
-        dashboard. The anon key is meant to be public: it identifies the project, it does not
-        grant access. Row Level Security is what protects your tables.
-      </p>
-      <Field label="Project URL" value={url} onChange={setUrl} placeholder="https://xxxx.supabase.co" />
-      <Field label="Anon key" value={anonKey} onChange={setAnonKey} placeholder="eyJhbGciOi…" />
-      {err && <div className="text-[11.5px]" style={{ color: ACCENT }}>{err}</div>}
-      <Button onClick={save} label="Save and continue" />
-      <p className="text-[10.5px] text-[var(--cream-mute)]">
-        Stored in this browser. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY
-        at build time to skip this step for everyone.
-      </p>
-    </Card>
-  );
-}
-
 /* ── sign in ────────────────────────────────────────────────────────── */
 
-function SignInCard() {
+function SignInCard({ configured }: { configured: boolean }) {
   const [mode, setMode] = useState<Mode>("password");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -122,7 +84,14 @@ function SignInCard() {
 
   const submit = useCallback(async () => {
     const sb = getSupabase();
-    if (!sb) return;
+    if (!sb) {
+      setErr(
+        "This build has no Supabase project. Set NEXT_PUBLIC_SUPABASE_URL and " +
+        "NEXT_PUBLIC_SUPABASE_ANON_KEY and redeploy, or open this page once with " +
+        "?sbUrl=https://xxxx.supabase.co&sbKey=YOUR_ANON_KEY to set it for this browser.",
+      );
+      return;
+    }
     setBusy(true); setErr(null); setSent(false);
     try {
       if (mode === "password") {
@@ -182,10 +151,11 @@ function SignInCard() {
         (Authentication → Users), and leave public sign-ups disabled so the URL
         alone is not an invitation.
       </p>
-      <button onClick={() => { clearConfig(); location.reload(); }}
-              className="text-[10.5px] text-left text-[var(--cream-mute)] hover:text-[var(--cream)] underline">
-        use a different Supabase project
-      </button>
+      {!configured && (
+        <div className="text-[10.5px] leading-relaxed" style={{ color: ACCENT }}>
+          No Supabase project is configured for this build, so sign-in will fail until one is set.
+        </div>
+      )}
     </Card>
   );
 }

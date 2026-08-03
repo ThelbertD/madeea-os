@@ -46,6 +46,23 @@ export function clearConfig(): void {
   client = null;
 }
 
+/* The setup screen is gone — sign-in is the first thing anyone sees. A project
+ * can still be pointed at without a rebuild by opening the page once with
+ * ?sbUrl=…&sbKey=…, which is stripped from the address bar immediately so it is
+ * not shared by copy-paste or leaked in a Referer header. */
+if (typeof window !== "undefined") {
+  try {
+    const q = new URLSearchParams(window.location.search);
+    const u = q.get("sbUrl");
+    const k = q.get("sbKey");
+    if (u && k) {
+      localStorage.setItem(LS_URL, u.replace(/\/+$/, ""));
+      localStorage.setItem(LS_KEY, k.trim());
+      history.replaceState({}, "", window.location.pathname + window.location.hash);
+    }
+  } catch { /* storage or history blocked — fall through unconfigured */ }
+}
+
 let client: SupabaseClient | null = null;
 
 /** Null when nothing is configured yet — callers show the setup step instead. */
