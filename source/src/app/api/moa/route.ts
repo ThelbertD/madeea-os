@@ -14,7 +14,11 @@ export const maxDuration = 300;
 const ENDPOINT = "https://openrouter.ai/api/v1/chat/completions";
 
 // Mirrors the live `hermes moa` preset (default): Opus 4.8 + GPT-5.5 → Opus 4.8.
-export const PRESET = {
+// NOT exported: a route module may only export the handler names Next.js knows
+// (GET/POST/runtime/dynamic/…). Exporting this object fails the production type
+// check with "Property 'PRESET' is incompatible with index signature", even
+// though `next dev` accepts it. It is only read in this file — GET returns it.
+const PRESET = {
   references: ["anthropic/claude-opus-4.8", "openai/gpt-5.5"],
   aggregator: "anthropic/claude-opus-4.8",
 };

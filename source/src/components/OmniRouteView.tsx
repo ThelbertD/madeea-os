@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Route, Check, Copy, ExternalLink, Zap, Shield, Infinity as InfinityIcon, Boxes, Send, Loader2, ChevronDown, ChevronRight, Play, Download, Code2, Eye, Sparkles, Wand2, Save, FolderOpen, Plus, FileCode, MessageSquare } from "lucide-react";
+import { authHeaders } from "@/lib/supabaseClient";
 
 const ACCENT = "#2dd4bf";
 const ACCENT2 = "#a78bfa";
@@ -87,8 +88,9 @@ export default function OmniRouteView() {
     setHydrated(true);
   }, []);
 
-  const refreshSaved = useCallback(() => {
-    fetch("/api/omniroute/workspace", { cache: "no-store" }).then((r) => r.json()).then((j) => setSaved({ builds: j.builds || [], sessions: j.sessions || [] })).catch(() => {});
+  const refreshSaved = useCallback(async () => {
+    const headers = await authHeaders();
+    fetch("/api/omniroute/workspace", { cache: "no-store", headers }).then((r) => r.json()).then((j) => setSaved({ builds: j.builds || [], sessions: j.sessions || [] })).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -105,8 +107,9 @@ export default function OmniRouteView() {
     try { localStorage.setItem(LS_MSGS, JSON.stringify(msgs)); } catch { /* ignore */ }
     if (!msgs.length) return;
     const title = (msgs[0]?.content || "Session").slice(0, 60);
-    const t = setTimeout(() => {
-      fetch("/api/omniroute/workspace", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "saveSession", id: sidRef.current, title, messages: msgs }) }).then(refreshSaved).catch(() => {});
+    const t = setTimeout(async () => {
+      const headers = { "Content-Type": "application/json", ...(await authHeaders()) };
+      fetch("/api/omniroute/workspace", { method: "POST", headers, body: JSON.stringify({ action: "saveSession", id: sidRef.current, title, messages: msgs }) }).then(refreshSaved).catch(() => {});
     }, 900);
     return () => clearTimeout(t);
   }, [msgs, hydrated, refreshSaved]);
@@ -141,7 +144,8 @@ export default function OmniRouteView() {
   async function saveBuild() {
     if (!code) return;
     const title = (msgs.find((m) => m.role === "user")?.content || "build").slice(0, 48);
-    await fetch("/api/omniroute/workspace", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "saveBuild", code: htmlish ? toDoc(code.code) : code.code, title }) }).catch(() => {});
+    const headers = { "Content-Type": "application/json", ...(await authHeaders()) };
+    await fetch("/api/omniroute/workspace", { method: "POST", headers, body: JSON.stringify({ action: "saveBuild", code: htmlish ? toDoc(code.code) : code.code, title }) }).catch(() => {});
     setSavedFlash(true); setTimeout(() => setSavedFlash(false), 1400);
     refreshSaved();
   }
@@ -151,8 +155,24 @@ export default function OmniRouteView() {
     try { localStorage.setItem(LS_SID, sidRef.current); localStorage.removeItem(LS_MSGS); } catch { /* ignore */ }
   }
   async function loadSession(id: string) {
-    const j = await fetch(`/api/omniroute/workspace?session=${encodeURIComponent(id)}`, { cache: "no-store" }).then((r) => r.json()).catch(() => null);
+    const headers = await authHeaders();
+    const j = await fetch(`/api/omniroute/workspace?session=${encodeURIComponent(id)}`, { cache: "no-store", headers }).then((r) => r.json()).catch(() => null);
     if (j?.messages) { setMsgs(j.messages); sidRef.current = id; try { localStorage.setItem(LS_SID, id); } catch { /* ignore */ } }
+  }
+
+  /* Saved builds used to be a plain <a href="…?open=…"> opened in a new tab. A
+     navigation cannot carry an Authorization header, so under RLS the handler
+     would have no idea who was asking and fall back to the on-disk store —
+     showing nothing for a build that lives in Supabase. Fetch it with the token
+     instead and hand the tab a blob URL. */
+  async function openBuild(file: string) {
+    const headers = await authHeaders();
+    const r = await fetch(`/api/omniroute/workspace?open=${encodeURIComponent(file)}`, { cache: "no-store", headers }).catch(() => null);
+    if (!r || !r.ok) { setErr("That build could not be opened."); return; }
+    const url = URL.createObjectURL(new Blob([await r.text()], { type: "text/html" }));
+    window.open(url, "_blank", "noopener");
+    // Give the new tab time to load before dropping the object URL.
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
   }
 
   const SUGGESTIONS = ["Build a glowing neon button in HTML", "An animated starfield on a canvas", "A pricing card with a hover glow", "A bouncing DVD-logo screensaver"];
@@ -276,12 +296,12 @@ export default function OmniRouteView() {
           {saved.builds.length === 0 ? <div className="text-[11.5px] text-[var(--cream-mute)]">Nothing saved yet — build something and hit <b className="text-[var(--cream)]">Save build</b>.</div> : (
             <div className="space-y-1.5 max-h-[220px] overflow-y-auto scroll">
               {saved.builds.map((b) => (
-                <a key={b.file} href={`/api/omniroute/workspace?open=${encodeURIComponent(b.file)}`} target="_blank" rel="noopener" className="flex items-center gap-2 px-3 py-2 rounded-lg or-save" style={{ border: "1px solid var(--line-soft)", background: "rgba(255,255,255,0.02)" }}>
+                <button key={b.file} type="button" onClick={() => openBuild(b.file)} className="w-full text-left flex items-center gap-2 px-3 py-2 rounded-lg or-save" style={{ border: "1px solid var(--line-soft)", background: "rgba(255,255,255,0.02)" }}>
                   <FileCode size={13} color={ACCENT} className="shrink-0" />
                   <span className="text-[12px] text-[var(--cream)] truncate flex-1">{b.title || b.file}</span>
                   <span className="text-[10px] mono text-[var(--cream-mute)] shrink-0">{new Date(b.when).toLocaleDateString()}</span>
                   <ExternalLink size={11} color="var(--cream-mute)" className="shrink-0" />
-                </a>
+                </button>
               ))}
             </div>
           )}

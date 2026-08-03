@@ -82,6 +82,25 @@ export function getSupabase(): SupabaseClient | null {
   return client;
 }
 
+/* Authorization header for calls to our own /api routes.
+ *
+ * Route handlers have no session of their own, so forwarding the access token is
+ * what lets one act as the signed-in user and read/write that user's rows under
+ * RLS (see lib/supabaseServer.ts). Resolves to {} when signed out or
+ * unconfigured, which the routes treat as "use the local on-disk store" — so a
+ * signed-out session degrades to the old behaviour instead of failing. */
+export async function authHeaders(): Promise<Record<string, string>> {
+  const sb = getSupabase();
+  if (!sb) return {};
+  try {
+    const { data } = await sb.auth.getSession();
+    const token = data.session?.access_token;
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  } catch {
+    return {};
+  }
+}
+
 /** Where a magic link should land. Keeps the basePath the export was built with. */
 export function redirectTo(): string {
   if (typeof window === "undefined") return "";
