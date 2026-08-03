@@ -1,0 +1,72 @@
+"use client";
+
+/* Supabase auth for the dashboard.
+ *
+ * Config resolution, in order:
+ *   1. NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY at build time
+ *   2. localStorage, set once from the login screen
+ *
+ * The second path exists because the published build is a static export: there
+ * is no server to read an env var, and rebuilding the whole export just to
+ * change a project URL is a poor trade. Both are read in the browser only.
+ *
+ * The anon key is designed to be public — it identifies the project, it does
+ * not grant access. Row Level Security is what actually protects data, so any
+ * table this app reads must have RLS enabled or the key is a skeleton key.
+ */
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+
+const LS_URL = "madeea.supabase.url";
+const LS_KEY = "madeea.supabase.anonKey";
+
+export interface SupabaseConfig { url: string; anonKey: string }
+
+export function readConfig(): SupabaseConfig | null {
+  const envUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const envKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (envUrl && envKey) return { url: envUrl, anonKey: envKey };
+  if (typeof window === "undefined") return null;
+  try {
+    const url = localStorage.getItem(LS_URL);
+    const anonKey = localStorage.getItem(LS_KEY);
+    if (url && anonKey) return { url, anonKey };
+  } catch { /* storage blocked — treat as unconfigured */ }
+  return null;
+}
+
+export function saveConfig(cfg: SupabaseConfig): void {
+  localStorage.setItem(LS_URL, cfg.url.replace(/\/+$/, ""));
+  localStorage.setItem(LS_KEY, cfg.anonKey.trim());
+  client = null; // force a rebuild against the new project
+}
+
+export function clearConfig(): void {
+  localStorage.removeItem(LS_URL);
+  localStorage.removeItem(LS_KEY);
+  client = null;
+}
+
+let client: SupabaseClient | null = null;
+
+/** Null when nothing is configured yet — callers show the setup step instead. */
+export function getSupabase(): SupabaseClient | null {
+  if (client) return client;
+  const cfg = readConfig();
+  if (!cfg) return null;
+  client = createClient(cfg.url, cfg.anonKey, {
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+      // The static export is served from a path, not a route the SDK controls,
+      // so let it read the hash itself after a magic-link redirect.
+      detectSessionInUrl: true,
+    },
+  });
+  return client;
+}
+
+/** Where a magic link should land. Keeps the basePath the export was built with. */
+export function redirectTo(): string {
+  if (typeof window === "undefined") return "";
+  return window.location.origin + window.location.pathname;
+}

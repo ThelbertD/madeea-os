@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import Shell from "@/components/Shell";
+import LoginGate from "@/components/LoginGate";
 
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
@@ -32,7 +33,11 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
           (e.g. ColorZilla's cz-shortcut-listen) before React hydrates. */}
       <body className="min-h-full" suppressHydrationWarning>
         <div className="relative z-10">
-          <Shell>{children}</Shell>
+          {/* The gate wraps Shell, not the other way round: the sidebar and its
+              status probes should not render, or fire, before someone is in. */}
+          <LoginGate>
+            <Shell>{children}</Shell>
+          </LoginGate>
         </div>
       </body>
     </html>
