@@ -390,6 +390,26 @@
       // fetch is refused even over plain http. tools/serve-local.mjs relays it
       // server-side at /__od/health; try that first and fall back to direct in
       // case this page is served some other way.
+      /* 0. an Open Design published over https (?odweb=…). This is the only
+            probe that works from a deployed page: the other three all end at
+            127.0.0.1, which the browser refuses from an https origin.
+
+            od-web-server.mjs proxies /api/* to the daemon, but sends no
+            Access-Control-Allow-Origin, so a normal cross-origin read is
+            refused. A no-cors request still RESOLVES when it reached a server
+            and REJECTS when nothing answered, which separates running from
+            stopped. The response is opaque, so this reports reachability
+            rather than the daemon's own ok flag — a served-but-unhealthy
+            Open Design would still read as healthy here. */
+      if (/^https:/i.test(ODWEB)) {
+        try {
+          await nativeFetch(ODWEB + '/api/health', { mode: 'no-cors', signal: AbortSignal.timeout(6000) });
+          return json({ healthy: true, url: WEB });
+        } catch (e0) {
+          return json({ healthy: false, url: WEB });
+        }
+      }
+
       // 1. the local launcher's relay, when this page is served by it
       try {
         var viaHost = await nativeFetch('/__od/health', { signal: AbortSignal.timeout(5000) });
