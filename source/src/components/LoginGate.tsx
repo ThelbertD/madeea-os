@@ -15,7 +15,7 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
-import { KeyRound, Loader2, LogOut, Mail } from "lucide-react";
+import { KeyRound, Loader2, Mail } from "lucide-react";
 import { getSupabase, readConfig, redirectTo } from "@/lib/supabaseClient";
 
 const ACCENT = "#fd5812";
@@ -64,12 +64,10 @@ export default function LoginGate({ children }: { children: React.ReactNode }) {
 
   if (!session) return <SignInCard configured={configured} />;
 
-  return (
-    <>
-      <SignedInBar email={session.user.email ?? "signed in"} />
-      {children}
-    </>
-  );
+  // No account bar above the app. The email and sign-out that used to sit here
+  // are on the Settings page, which is reachable from the sidebar — one place
+  // for account actions rather than a strip on top of every screen.
+  return <>{children}</>;
 }
 
 /* ── sign in ────────────────────────────────────────────────────────── */
@@ -160,23 +158,6 @@ function SignInCard({ configured }: { configured: boolean }) {
   );
 }
 
-/* ── signed in ──────────────────────────────────────────────────────── */
-
-function SignedInBar({ email }: { email: string }) {
-  const [busy, setBusy] = useState(false);
-  return (
-    <div className="flex items-center justify-end gap-3 px-5 py-2 text-[11px] border-b"
-         style={{ borderColor: "var(--line-soft)", color: "var(--cream-mute)" }}>
-      <span className="mono">{email}</span>
-      <button
-        onClick={async () => { setBusy(true); await getSupabase()?.auth.signOut(); setBusy(false); }}
-        className="flex items-center gap-1.5 hover:text-[var(--cream)]"
-      >
-        {busy ? <Loader2 size={11} className="animate-spin" /> : <LogOut size={11} />} sign out
-      </button>
-    </div>
-  );
-}
 
 /* ── bits ───────────────────────────────────────────────────────────── */
 

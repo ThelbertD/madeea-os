@@ -54,6 +54,7 @@ const NAV: NavItem[] = [
   { href: "/notebook", label: "Notebook", icon: <NotebookText size={16} />, accent: "#fde047", dim: "rgba(253,224,71,0.16)" },
   { href: "/kanban",   label: "Kanban",   icon: <Columns3 size={16} />,  accent: "#14b8a6", dim: "rgba(20,184,166,0.16)" },
   { href: "/memory",   label: "Memory",   icon: <Brain size={16} />,     accent: "#22d3ee", dim: "rgba(34,211,238,0.16)" },
+  { href: "/settings", label: "Settings", icon: <SlidersHorizontal size={16} />, accent: "#94a3b8", dim: "rgba(148,163,184,0.16)" },
 ];
 
 const DEFAULT_ORDER = NAV.map((n) => n.href);
