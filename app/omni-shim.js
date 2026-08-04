@@ -263,6 +263,33 @@
       return json({ error: 'All free providers are busy right now — try again in a moment.', tried: res.tried }, 503);
     },
 
+    /* The real /api/claude/chat spawns the `claude` CLI on the machine running
+       the dashboard. A browser cannot spawn a process, so on a published page
+       this fell through to the empty-200 default and the Claude tab rendered
+       "(no output)" — it looked broken rather than unavailable.
+
+       Answer it from the same OmniRoute gateway the OmniRoute tab uses. It is
+       not Anthropic's Claude and the models differ, but the tab does something
+       real instead of nothing.
+
+       The caller reads NDJSON and accumulates evt.event.delta.text, falling
+       back to evt.result — see streamClaude() in UnifiedChat.tsx. complete()
+       is not streaming, so emit the whole answer as one result line, which is
+       the branch that sets the text when no deltas arrived. */
+    'claude/chat': async function (req) {
+      var body = await req.json().catch(function () { return {}; });
+      var prompt = typeof body.prompt === 'string' ? body.prompt.trim() : '';
+      if (!prompt) return json({ error: 'prompt required' }, 400);
+      var res = await complete([{ role: 'user', content: prompt }], null);
+      var line = JSON.stringify(res.ok
+        ? { type: 'result', result: res.content }
+        : { type: 'result', result: 'All free providers are busy right now — try again in a moment.' });
+      return new Response(line + '\n', {
+        status: 200,
+        headers: { 'Content-Type': 'application/x-ndjson; charset=utf-8' }
+      });
+    },
+
     // Builds and chat sessions normally land in ~/.agentic-os/omniroute-workspace.
     // A browser has no filesystem, so they live in localStorage instead.
     'omniroute/workspace': async function (req, url) {
