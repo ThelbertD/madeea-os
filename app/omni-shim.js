@@ -97,12 +97,29 @@
       var b = q.get('bridge');
       var t = q.get('t');
       var ow = q.get('odweb');
+      /* ?gateway=https://xxxx.trycloudflare.com — point straight at an OmniRoute
+         that is already published over https (its dashboard can start a
+         Cloudflare tunnel for you). That is https→https, so the Private Network
+         Access rule that blocks a published page from calling localhost does not
+         apply, and OmniRoute reflects the caller's origin in
+         Access-Control-Allow-Origin, so CORS passes too.
+         Written with raw localStorage, not store.set: GATEWAY above is read with
+         a bare getItem, so a JSON-encoded value would come back with quotes in it
+         and every request would go to "https://…" including the quote marks. */
+      var g = q.get('gateway');
+      if (g === 'off') {
+        GATEWAY = 'http://localhost:20128';
+        try { localStorage.removeItem(LS + 'gateway'); } catch (e) {}
+      } else if (g) {
+        GATEWAY = g.replace(/\/+$/, '');
+        try { localStorage.setItem(LS + 'gateway', GATEWAY); } catch (e) {}
+      }
       if (ow === 'off') { ODWEB = ''; store.set('odweb', ''); }
       else if (ow) { ODWEB = ow.replace(/\/+$/, ''); store.set('odweb', ODWEB); }
       if (b === 'off') { store.set('bridge', 'http://127.0.0.1:20129'); store.set('token', ''); BRIDGE = 'http://127.0.0.1:20129'; TOKEN = ''; }
       else if (b) { BRIDGE = b.replace(/\/+$/, ''); store.set('bridge', BRIDGE); }
       if (t) { TOKEN = t; store.set('token', TOKEN); }
-      if (b || t || ow) {
+      if (b || t || ow || g) {
         // Drop the credentials from the address bar so they are not shared
         // by copy-paste or leaked in a Referer header.
         history.replaceState({}, '', location.pathname + location.hash);
@@ -120,6 +137,9 @@
   var bridgeUp = null;                       // null = unknown, true/false once probed
 
   function isRemoteBridge() { return /^https:/i.test(BRIDGE); }
+  /* A gateway that is itself published over https needs no bridge and no
+     tunnel of ours — the page can call it directly. */
+  function isRemoteGateway() { return /^https:/i.test(GATEWAY); }
 
   /* A published https page cannot reach http://localhost at all — Chrome's
      Private Network Access check refuses it before the request leaves, so no
@@ -128,7 +148,9 @@
      app rather than "this machine isn't the one serving the gateway".
      Unless a tunnelled bridge is configured, don't try. */
   function localBlocked() {
-    return location.protocol === 'https:' && !isRemoteBridge();
+    // Only "local" gateways are blocked. An https gateway (?gateway=…) is a
+    // normal cross-origin call and is allowed from a published page.
+    return location.protocol === 'https:' && !isRemoteBridge() && !isRemoteGateway();
   }
 
   async function haveBridge() {
