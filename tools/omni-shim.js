@@ -97,12 +97,29 @@
       var b = q.get('bridge');
       var t = q.get('t');
       var ow = q.get('odweb');
+      /* ?gateway=https://xxxx.trycloudflare.com — point straight at an OmniRoute
+         that is already published over https (its dashboard can start a
+         Cloudflare tunnel for you). That is https→https, so the Private Network
+         Access rule that blocks a published page from calling localhost does not
+         apply, and OmniRoute reflects the caller's origin in
+         Access-Control-Allow-Origin, so CORS passes too.
+         Written with raw localStorage, not store.set: GATEWAY above is read with
+         a bare getItem, so a JSON-encoded value would come back with quotes in it
+         and every request would go to "https://…" including the quote marks. */
+      var g = q.get('gateway');
+      if (g === 'off') {
+        GATEWAY = 'http://localhost:20128';
+        try { localStorage.removeItem(LS + 'gateway'); } catch (e) {}
+      } else if (g) {
+        GATEWAY = g.replace(/\/+$/, '');
+        try { localStorage.setItem(LS + 'gateway', GATEWAY); } catch (e) {}
+      }
       if (ow === 'off') { ODWEB = ''; store.set('odweb', ''); }
       else if (ow) { ODWEB = ow.replace(/\/+$/, ''); store.set('odweb', ODWEB); }
       if (b === 'off') { store.set('bridge', 'http://127.0.0.1:20129'); store.set('token', ''); BRIDGE = 'http://127.0.0.1:20129'; TOKEN = ''; }
       else if (b) { BRIDGE = b.replace(/\/+$/, ''); store.set('bridge', BRIDGE); }
       if (t) { TOKEN = t; store.set('token', TOKEN); }
-      if (b || t || ow) {
+      if (b || t || ow || g) {
         // Drop the credentials from the address bar so they are not shared
         // by copy-paste or leaked in a Referer header.
         history.replaceState({}, '', location.pathname + location.hash);
@@ -120,6 +137,9 @@
   var bridgeUp = null;                       // null = unknown, true/false once probed
 
   function isRemoteBridge() { return /^https:/i.test(BRIDGE); }
+  /* A gateway that is itself published over https needs no bridge and no
+     tunnel of ours — the page can call it directly. */
+  function isRemoteGateway() { return /^https:/i.test(GATEWAY); }
 
   /* A published https page cannot reach http://localhost at all — Chrome's
      Private Network Access check refuses it before the request leaves, so no
@@ -128,7 +148,9 @@
      app rather than "this machine isn't the one serving the gateway".
      Unless a tunnelled bridge is configured, don't try. */
   function localBlocked() {
-    return location.protocol === 'https:' && !isRemoteBridge();
+    // Only "local" gateways are blocked. An https gateway (?gateway=…) is a
+    // normal cross-origin call and is allowed from a published page.
+    return location.protocol === 'https:' && !isRemoteBridge() && !isRemoteGateway();
   }
 
   async function haveBridge() {
@@ -241,6 +263,33 @@
       return json({ error: 'All free providers are busy right now — try again in a moment.', tried: res.tried }, 503);
     },
 
+    /* The real /api/claude/chat spawns the `claude` CLI on the machine running
+       the dashboard. A browser cannot spawn a process, so on a published page
+       this fell through to the empty-200 default and the Claude tab rendered
+       "(no output)" — it looked broken rather than unavailable.
+
+       Answer it from the same OmniRoute gateway the OmniRoute tab uses. It is
+       not Anthropic's Claude and the models differ, but the tab does something
+       real instead of nothing.
+
+       The caller reads NDJSON and accumulates evt.event.delta.text, falling
+       back to evt.result — see streamClaude() in UnifiedChat.tsx. complete()
+       is not streaming, so emit the whole answer as one result line, which is
+       the branch that sets the text when no deltas arrived. */
+    'claude/chat': async function (req) {
+      var body = await req.json().catch(function () { return {}; });
+      var prompt = typeof body.prompt === 'string' ? body.prompt.trim() : '';
+      if (!prompt) return json({ error: 'prompt required' }, 400);
+      var res = await complete([{ role: 'user', content: prompt }], null);
+      var line = JSON.stringify(res.ok
+        ? { type: 'result', result: res.content }
+        : { type: 'result', result: 'All free providers are busy right now — try again in a moment.' });
+      return new Response(line + '\n', {
+        status: 200,
+        headers: { 'Content-Type': 'application/x-ndjson; charset=utf-8' }
+      });
+    },
+
     // Builds and chat sessions normally land in ~/.agentic-os/omniroute-workspace.
     // A browser has no filesystem, so they live in localStorage instead.
     'omniroute/workspace': async function (req, url) {
@@ -341,6 +390,26 @@
       // fetch is refused even over plain http. tools/serve-local.mjs relays it
       // server-side at /__od/health; try that first and fall back to direct in
       // case this page is served some other way.
+      /* 0. an Open Design published over https (?odweb=…). This is the only
+            probe that works from a deployed page: the other three all end at
+            127.0.0.1, which the browser refuses from an https origin.
+
+            od-web-server.mjs proxies /api/* to the daemon, but sends no
+            Access-Control-Allow-Origin, so a normal cross-origin read is
+            refused. A no-cors request still RESOLVES when it reached a server
+            and REJECTS when nothing answered, which separates running from
+            stopped. The response is opaque, so this reports reachability
+            rather than the daemon's own ok flag — a served-but-unhealthy
+            Open Design would still read as healthy here. */
+      if (/^https:/i.test(ODWEB)) {
+        try {
+          await nativeFetch(ODWEB + '/api/health', { mode: 'no-cors', signal: AbortSignal.timeout(6000) });
+          return json({ healthy: true, url: WEB });
+        } catch (e0) {
+          return json({ healthy: false, url: WEB });
+        }
+      }
+
       // 1. the local launcher's relay, when this page is served by it
       try {
         var viaHost = await nativeFetch('/__od/health', { signal: AbortSignal.timeout(5000) });
