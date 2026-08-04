@@ -44,6 +44,22 @@
   ];
   var STEER = 'You are a fast, senior coding assistant. Do NOT overthink or deliberate at length. Answer immediately and concisely. When asked for code, output it right away in a single fenced code block, complete and self-contained. Keep any reasoning to an absolute minimum.';
 
+  /* Video models OmniRoute publishes at /v1/videos/generations — GET that path
+     lists them. Ordered fallback for the same reason as FREE_CHAIN: these are
+     free providers and rate-limit often, so move to the next rather than
+     failing a render the user waited minutes for. */
+  var VIDEO_CHAIN = ['veo-free/veo', 'veoaifree-web/veo', 'veo-free/seedance', 'veoaifree-web/seedance'];
+
+  /* The endpoint returns base64, not a URL. A data: URL holding a multi-megabyte
+     mp4 becomes an enormous DOM attribute and seeking in it is unreliable; a
+     blob URL is an ordinary object the <video> element can stream and seek. */
+  function b64ToBlobUrl(b64, type) {
+    var bin = atob(b64);
+    var bytes = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return URL.createObjectURL(new Blob([bytes], { type: type }));
+  }
+
   var AGENTS = [
     { id: 'claude',   name: 'Claude',           color: '#ff8a5b', persona: 'You are Claude — thoughtful, careful, balanced. You weigh trade-offs, bring nuance, and give a calm, precise take. You gently flag risks others miss.' },
     { id: 'hermes',   name: 'Hermes',           color: '#60a5fa', persona: 'You are Hermes — direct, action-oriented, a little unfiltered. You cut straight to the practical next step and call out fluff. You like momentum.' },
@@ -537,31 +553,56 @@
       return json({ count: out.length, projects: out });
     },
 
+    /* Real video, from OmniRoute's /v1/videos/generations.
+       This used to record a canvas animation with MediaRecorder — a title card
+       the browser drew itself, not a generated film. OmniRoute publishes VEO 3.1
+       and Seedance (GET the same path to list them) and its handler returns
+       { created, data: [{ b64_json, format }] }: one finished clip, rendered
+       synchronously, typically minutes.
+
+       Keep the job contract the UI already speaks — POST returns a jobId, then
+       status?id= is polled every 1.5s for up to 12 minutes. Awaiting the render
+       inside the POST would hold one request open for minutes and trip the
+       page's own timeout. */
     'openmontage/generate': async function (req) {
       var b = await req.json().catch(function () { return {}; });
       var prompt = String(b.prompt || '').trim();
-      if (!prompt) return json({ error: 'Describe the video first.' }, 400);
-      if (!window.MediaRecorder || !HTMLCanvasElement.prototype.captureStream) {
-        return json({ error: 'This browser cannot record video. Chrome or Edge works.' }, 501);
-      }
-      var shots = Math.max(1, Math.min(6, Number(b.shots) || 3));
-      var seconds = Math.max(8, shots * 4);
+      if (prompt.length < 4) return json({ error: 'Describe the video you want (a few words).' }, 400);
+
       var id = 'om-' + Date.now().toString(36);
-      OMJOBS[id] = { status: 'rendering', progress: 5, message: 'Recording…',
-                     title: prompt.slice(0, 60) };
-      vRender(vTitle(prompt), seconds, function (pct) {
-        OMJOBS[id].progress = Math.max(5, pct);
-      }).then(function (blob) {
-        return vPutVideo(id, blob).then(function () {
-          return vVideoURL(id).then(function (u) {
+      OMJOBS[id] = { status: 'rendering', progress: 4, title: prompt.slice(0, 60),
+                     message: 'Sending to the video model…', startedAt: Date.now() };
+
+      // Deliberately not awaited — it resolves long after this response.
+      (async function render() {
+        var tried = [];
+        for (var i = 0; i < VIDEO_CHAIN.length; i++) {
+          var model = VIDEO_CHAIN[i];
+          try {
+            var r = await gw('/v1/videos/generations', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', Authorization: 'Bearer free-local' },
+              body: JSON.stringify({ model: model, prompt: prompt }),
+              signal: AbortSignal.timeout(11 * 60 * 1000)
+            });
+            var j = await r.json().catch(function () { return null; });
+            var d = j && j.data && j.data[0];
+            if (!d) { tried.push(model + ' — ' + ((j && j.error && j.error.message) || 'HTTP ' + r.status)); continue; }
+
+            var src = d.url || (d.b64_json ? b64ToBlobUrl(d.b64_json, 'video/' + (d.format || 'mp4')) : '');
+            if (!src) { tried.push(model + ' — no video in the response'); continue; }
+
             OMJOBS[id] = { status: 'done', progress: 100, message: 'Done',
-                           title: prompt.slice(0, 60), video: id + '.webm', videoUrl: u.url };
-          });
-        });
-      }).catch(function (e) {
+                           title: prompt.slice(0, 60), videoUrl: src };
+            return;
+          } catch (e) {
+            tried.push(model + ' — ' + String((e && e.message) || e).slice(0, 80));
+          }
+        }
         OMJOBS[id] = { status: 'error', progress: 0, title: prompt.slice(0, 60),
-                       message: String((e && e.message) || e) };
-      });
+                       message: 'No video model could render that. ' + tried.join(' · ') };
+      })();
+
       return json({ jobId: id, status: 'planning' });
     },
 
@@ -569,6 +610,15 @@
       var id = url.searchParams.get('id') || url.searchParams.get('jobId') || '';
       var j = OMJOBS[id];
       if (!j) return json({ error: 'bad id' }, 400);
+      if (j.status === 'rendering' && j.startedAt) {
+        /* The endpoint reports nothing until it finishes, so there is no true
+           percentage available. Creep toward 95 on elapsed time against a ~4
+           minute expectation so the bar is not frozen; the message states what
+           is actually known. Only a returned video sets 100. */
+        var mins = (Date.now() - j.startedAt) / 60000;
+        j.progress = Math.min(95, 4 + Math.round((mins / 4) * 91));
+        j.message = 'Rendering — this usually takes a few minutes.';
+      }
       return json(j);
     },
 
