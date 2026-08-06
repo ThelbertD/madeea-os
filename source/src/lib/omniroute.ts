@@ -76,14 +76,47 @@ export function openrouterCodexEnv(): Record<string, string> {
 // valid id (400). sol=frontier, terra=balanced, luna=fast/cheap. Override via
 // CODEX_NATIVE_MODEL.
 export const NATIVE_CODEX_MODEL = process.env.CODEX_NATIVE_MODEL || "gpt-5.6-sol";
+
+/* Two ways to reach OpenAI, chosen by whether a key is configured.
+ *
+ * With OPENAI_API_KEY set, the provider is declared inline. codex-cli's
+ * BUILT-IN "openai" provider does not read that variable — it expects the OAuth
+ * session from `codex login` — so passing the key through the environment alone
+ * fails with 401 "Missing bearer or basic authentication in header", first over
+ * the responses WebSocket and again after it falls back to HTTPS. Declaring the
+ * provider with env_key is what actually binds the key to the request. Same
+ * inline-config trick used for OmniRoute above, so ~/.codex/config.toml is left
+ * untouched either way.
+ *
+ * Without a key it stays on the OAuth path, so an existing `codex login` keeps
+ * working exactly as before.
+ *
+ * wire_api must be "responses": codex-cli >= 0.142 dropped chat-completions.
+ * gpt-5.6-{sol|terra|luna} are valid on both an API key and a ChatGPT account —
+ * it is bare "gpt-5.6" that does not exist. */
+function hasOpenAIKey(): boolean {
+  return !!(process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY.trim());
+}
+
 export function nativeCodexArgs(model?: string | null): string[] {
   const m = model && MODEL_RE.test(model) ? model : NATIVE_CODEX_MODEL;
-  return ["-c", "model_provider=openai", "--model", m];
+  if (!hasOpenAIKey()) return ["-c", "model_provider=openai", "--model", m];
+  return [
+    "-c", "model_provider=oaikey",
+    "-c", "model_providers.oaikey.name=OpenAI",
+    "-c", "model_providers.oaikey.base_url=https://api.openai.com/v1",
+    "-c", "model_providers.oaikey.wire_api=responses",
+    "-c", "model_providers.oaikey.env_key=OPENAI_API_KEY",
+    "--model", m,
+  ];
 }
+
 export function nativeCodexEnv(): Record<string, string> {
-  // Nothing — Codex uses the OAuth tokens in ~/.codex/auth.json. Explicitly blank
-  // any OpenRouter key so a stray env can't flip it onto a paid API path.
-  return { OPENROUTER_API_KEY: "" };
+  // Blank any OpenRouter key so a stray env cannot divert this onto a different
+  // paid path. The OpenAI key is inherited from the server env rather than
+  // passed here, so it is never assembled into a command line.
+  const env: Record<string, string> = { OPENROUTER_API_KEY: "" };
+  return env;
 }
 
 

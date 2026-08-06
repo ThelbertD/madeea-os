@@ -103,6 +103,39 @@ openclaw onboard --non-interactive --accept-risk --flow quickstart \
 `--gateway-port 3002` is load-bearing: `src/lib/fleet.ts` probes that port, so
 without it the tile stays red no matter how healthy the daemon is.
 
+## Codex
+
+Two things are needed on Windows, both in `source/.env.local`:
+
+```
+AGENTIC_OS_CODEX_BIN=C:\Users\<you>\AppData\Local\Programs\OpenAI\Codex\bin\codex.exe
+OPENAI_API_KEY=sk-...
+```
+
+`AGENTIC_OS_CODEX_BIN` is not optional here. `lib/config.ts` resolves the binary
+as `env ?? file config ?? which("codex")`, and that `which()` does not find the
+Windows install even when `codex.exe` is on PATH. Without it **every** Codex
+engine returns 500 with:
+
+```
+Error: codex is not installed or not configured. Set AGENTIC_OS_CODEX_BIN or install the CLI.
+```
+
+The route streams NDJSON, so a failure arrives as an empty body — check the
+status code, not the output, when it looks like nothing happened.
+
+`OPENAI_API_KEY` is only needed for the `gpt56` engine. codex-cli's built-in
+`openai` provider ignores that variable — it wants the OAuth session from
+`codex login` — so `lib/omniroute.ts` declares the provider inline with
+`env_key` instead. Set no key and the OAuth path is used unchanged.
+
+Model ids: `gpt-5.6-{sol|terra|luna}` work on both an API key and a ChatGPT
+account. Bare `gpt-5.6` does not exist, and `gpt-5` logs a "model metadata not
+found" warning through codex-cli.
+
+Codex spawns a CLI, so it only works locally — it is one of the entries hidden
+on the published site.
+
 ## Workspace storage
 
 Saved builds and chat sessions go to Supabase when the caller is signed in, and to
