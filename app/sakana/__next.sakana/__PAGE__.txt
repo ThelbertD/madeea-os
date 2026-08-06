@@ -2,5 +2,5 @@
 2:I[12266,["4974","static/chunks/app/sakana/page-fc72675869630958.js"],"default"]
 3:I[90484,[],"OutletBoundary"]
 4:"$Sreact.suspense"
-0:{"rsc":["$","$1","c",{"children":[["$","div",null,{"className":"flex flex-col h-[calc(100vh-180px)]","children":["$","$L2",null,{}]}],null,["$","$L3",null,{"children":["$","$4",null,{"name":"Next.MetadataOutlet","children":"$@5"}]}]]}],"isPartial":false,"staleTime":300,"varyParams":null,"buildId":"0sA-XfkjbBvqFj4OV0Nuh"}
+0:{"rsc":["$","$1","c",{"children":[["$","div",null,{"className":"flex flex-col h-[calc(100vh-180px)]","children":["$","$L2",null,{}]}],null,["$","$L3",null,{"children":["$","$4",null,{"name":"Next.MetadataOutlet","children":"$@5"}]}]]}],"isPartial":false,"staleTime":300,"varyParams":null,"buildId":"IG0b0E4ajYEqMHJruPFAl"}
 5:null

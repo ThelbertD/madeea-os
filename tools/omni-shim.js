@@ -26,9 +26,34 @@
   'use strict';
 
   var LS = 'madeea.shim.';
+
+  /* Where a PUBLISHED page finds the gateway.
+     ────────────────────────────────────────
+     ?gateway= only ever settled it for the browser that opened that link,
+     because the value lives in localStorage. Everyone else — every teammate,
+     every client — got the localhost default, looked for a gateway on THEIR
+     machine, found none, and saw "Gateway offline". The link worked for
+     precisely one person and looked broken to the rest.
+
+     Baking the published address in as the default fixes that: the plain URL
+     works for anybody. localStorage still wins when set, so ?gateway= remains
+     the override for pointing a browser somewhere else.
+
+     Blank this to publish with no default. It must be an https address — a
+     published page cannot call http://localhost, whoever is looking. And it
+     currently names a Cloudflare quick tunnel, which is renamed every time the
+     tunnel restarts: when that happens this line has to be updated and the
+     export rebuilt. A named tunnel would end that chore for good. */
+  var PUBLISHED_GATEWAY = 'https://rush-dui-bid-internet.trycloudflare.com';
+
   var GATEWAY = (function () {
-    try { return localStorage.getItem(LS + 'gateway') || 'http://localhost:20128'; }
-    catch (e) { return 'http://localhost:20128'; }
+    // Served over http (localhost, the local launcher) the gateway is right
+    // here — going out over the tunnel would be a pointless round trip.
+    var fallback = (location.protocol === 'https:' && PUBLISHED_GATEWAY)
+      ? PUBLISHED_GATEWAY
+      : 'http://localhost:20128';
+    try { return localStorage.getItem(LS + 'gateway') || fallback; }
+    catch (e) { return fallback; }
   })();
 
   // Same fallback chain and steer text as src/app/api/omniroute/chat/route.ts —
@@ -105,7 +130,13 @@
   var TOKEN = store.get('token', '');
   // Open Design's UI asks for its assets from the origin root, so proxying it
   // under /odweb breaks them. Give it its own tunnel and point the iframe there.
-  var ODWEB = store.get('odweb', '');
+  /* Same story as PUBLISHED_GATEWAY: ?odweb= only ever configured one browser,
+     so the Open Design tab read offline for everyone else. Default it on a
+     published page so the plain URL works for the whole team. Blank it to
+     publish without one. */
+  var PUBLISHED_ODWEB = 'https://taxes-food-from-hidden.trycloudflare.com';
+  var ODWEB = store.get('odweb', '') ||
+    (location.protocol === 'https:' ? PUBLISHED_ODWEB : '');
 
   (function readQuery() {
     try {
