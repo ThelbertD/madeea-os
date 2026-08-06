@@ -172,10 +172,14 @@ function TeamCard({ user }: { user: User | null }) {
     ]);
     if (m.data) setMembers(m.data as Member[]);
     if (i.data) setInvites(i.data as Invite[]);
-    // The tables are optional: until 0003_team.sql is run these error, and the
-    // card should say so once rather than sit empty and look broken.
-    if (m.error && /relation .* does not exist/i.test(m.error.message)) {
-      setNote({ kind: "err", text: "Team tables are missing — run supabase/migrations/0003_team.sql." });
+    /* Until 0003_team.sql is run these queries fail, and the card should say
+       what to do rather than surface the raw driver message. Supabase words a
+       missing table two ways depending on whether PostgREST or Postgres
+       answers — "Could not find the table … in the schema cache" and
+       "relation … does not exist" — so match both. */
+    const err = m.error || i.error;
+    if (err && /schema cache|does not exist/i.test(err.message)) {
+      setNote({ kind: "err", text: "Team isn't set up yet — run supabase/migrations/0003_team.sql in the Supabase SQL editor, then reload." });
     }
   }, []);
 

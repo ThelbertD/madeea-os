@@ -3,7 +3,7 @@
 3:I[96566,["4286","static/chunks/4286-3d539af6e5686cc2.js","4116","static/chunks/4116-81d31873194dfcab.js","1626","static/chunks/1626-54a55e0c1600d6cc.js","121","static/chunks/121-83cd154474029d4f.js","8500","static/chunks/8500-f62a38ff68ab7f42.js","5643","static/chunks/5643-8ececbb8708c6065.js","7337","static/chunks/7337-7e954531334fa934.js","3108","static/chunks/app/openclaw/page-9f8a3cbc8a9d75e0.js"],"default"]
 6:I[90484,[],"OutletBoundary"]
 7:"$Sreact.suspense"
-0:{"rsc":["$","$1","c",{"children":[["$","$L2",null,{"Component":"$3","serverProvidedParams":{"searchParams":{},"params":{},"promises":["$@4","$@5"]}}],null,["$","$L6",null,{"children":["$","$7",null,{"name":"Next.MetadataOutlet","children":"$@8"}]}]]}],"isPartial":false,"staleTime":300,"varyParams":null,"buildId":"IG0b0E4ajYEqMHJruPFAl"}
+0:{"rsc":["$","$1","c",{"children":[["$","$L2",null,{"Component":"$3","serverProvidedParams":{"searchParams":{},"params":{},"promises":["$@4","$@5"]}}],null,["$","$L6",null,{"children":["$","$7",null,{"name":"Next.MetadataOutlet","children":"$@8"}]}]]}],"isPartial":false,"staleTime":300,"varyParams":null,"buildId":"gEApGSPBPnTm54Nx81DnE"}
 4:{}
 5:"$0:rsc:props:children:0:props:serverProvidedParams:params"
 8:null

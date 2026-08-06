@@ -2,5 +2,5 @@
 2:I[27753,["4286","static/chunks/4286-3d539af6e5686cc2.js","7461","static/chunks/app/ruflo/page-5a68186d30f58bfc.js"],"default"]
 3:I[90484,[],"OutletBoundary"]
 4:"$Sreact.suspense"
-0:{"rsc":["$","$1","c",{"children":[["$","$L2",null,{}],null,["$","$L3",null,{"children":["$","$4",null,{"name":"Next.MetadataOutlet","children":"$@5"}]}]]}],"isPartial":false,"staleTime":300,"varyParams":null,"buildId":"0sA-XfkjbBvqFj4OV0Nuh"}
+0:{"rsc":["$","$1","c",{"children":[["$","$L2",null,{}],null,["$","$L3",null,{"children":["$","$4",null,{"name":"Next.MetadataOutlet","children":"$@5"}]}]]}],"isPartial":false,"staleTime":300,"varyParams":null,"buildId":"gEApGSPBPnTm54Nx81DnE"}
 5:null

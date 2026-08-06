@@ -2,5 +2,5 @@
 2:I[14019,["8821","static/chunks/app/kimi/page-d013b9d051d8847d.js"],"default"]
 3:I[90484,[],"OutletBoundary"]
 4:"$Sreact.suspense"
-0:{"rsc":["$","$1","c",{"children":[["$","div",null,{"className":"flex flex-col h-[calc(100vh-270px)] min-h-[460px]","children":["$","$L2",null,{}]}],null,["$","$L3",null,{"children":["$","$4",null,{"name":"Next.MetadataOutlet","children":"$@5"}]}]]}],"isPartial":false,"staleTime":300,"varyParams":null,"buildId":"0sA-XfkjbBvqFj4OV0Nuh"}
+0:{"rsc":["$","$1","c",{"children":[["$","div",null,{"className":"flex flex-col h-[calc(100vh-270px)] min-h-[460px]","children":["$","$L2",null,{}]}],null,["$","$L3",null,{"children":["$","$4",null,{"name":"Next.MetadataOutlet","children":"$@5"}]}]]}],"isPartial":false,"staleTime":300,"varyParams":null,"buildId":"gEApGSPBPnTm54Nx81DnE"}
 5:null

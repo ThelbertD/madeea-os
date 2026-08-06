@@ -2,5 +2,5 @@
 2:I[80870,["7856","static/chunks/app/openmontage/page-471edf03919db7a3.js"],"default"]
 3:I[90484,[],"OutletBoundary"]
 4:"$Sreact.suspense"
-0:{"rsc":["$","$1","c",{"children":[["$","div",null,{"className":"flex flex-col h-[calc(100vh-180px)]","children":["$","$L2",null,{}]}],null,["$","$L3",null,{"children":["$","$4",null,{"name":"Next.MetadataOutlet","children":"$@5"}]}]]}],"isPartial":false,"staleTime":300,"varyParams":null,"buildId":"IG0b0E4ajYEqMHJruPFAl"}
+0:{"rsc":["$","$1","c",{"children":[["$","div",null,{"className":"flex flex-col h-[calc(100vh-180px)]","children":["$","$L2",null,{}]}],null,["$","$L3",null,{"children":["$","$4",null,{"name":"Next.MetadataOutlet","children":"$@5"}]}]]}],"isPartial":false,"staleTime":300,"varyParams":null,"buildId":"gEApGSPBPnTm54Nx81DnE"}
 5:null

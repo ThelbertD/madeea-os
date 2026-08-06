@@ -63,6 +63,44 @@ const AGENT_ROUTES = new Set(["/claude", "/openclaw", "/hermes", "/antigravity",
 const LS_ORDER = "agentos.sidebar.order";
 const LS_HIDDEN = "agentos.sidebar.hidden";
 
+/* What a visitor sees on the PUBLISHED site.
+   ─────────────────────────────────────────
+   The published site is a static export with no server, so app/omni-shim.js
+   answers /api/* in the browser. Anything it does not implement returns an
+   empty 200 — the page renders, then sits there doing nothing, which reads as
+   broken rather than unavailable. That is a poor thing to hand a client.
+
+   Everything below either has no shim endpoint at all, or drives a program on
+   the machine running the dashboard (a CLI, Python, a local port) which no
+   browser can do. Determined by comparing the shim's route table against this
+   list, not by guesswork.
+
+   /openmontage is the exception: it IS implemented, but the free video
+   provider behind it never responds — a render hangs for eleven minutes and
+   then fails. Hidden until a working provider is configured.
+
+   What remains visible is what has been verified to work: Mission Control,
+   Claude, OmniRoute, Open Design, the agent room, Memory, Video, Video Editor,
+   Kanban and Settings.
+
+   This is a DEFAULT, not a restriction. It applies only when no preference is
+   stored, and the customise control still reveals everything. Locally the whole
+   app works, so the full sidebar shows. */
+const PUBLISHED_HIDDEN = [
+  "/paperclip", "/pipeline", "/openclaw", "/hermes", "/antigravity", "/codex",
+  "/kimi", "/glm", "/glm-code", "/grok", "/freeclaude", "/hy3-coder",
+  "/opencode", "/fusion", "/sakana", "/local", "/fleet", "/agent-kanban",
+  "/loop", "/seo", "/music", "/games", "/apps", "/thumbnails", "/notebook",
+  "/openmontage",
+];
+
+/* Published means served over https from somewhere that is not this machine.
+   The local launcher serves over http, where every feature genuinely works. */
+function isPublished(): boolean {
+  if (typeof window === "undefined") return false;
+  return window.location.protocol === "https:" && !/^(localhost|127\.|\[::1\])/.test(window.location.hostname);
+}
+
 // Sidebar grouping. Mission Control sits under the top "Workspace" header;
 // Paperclip + AI Agent Mastermind + Pipeline + Agent Kanban get their own "Agent Orchestration" group;
 // the model agents under "Agents"; everything else under "Self".
@@ -93,6 +131,10 @@ export default function Sidebar() {
       const h = JSON.parse(localStorage.getItem(LS_HIDDEN) || "null");
       if (Array.isArray(o)) setOrder(o.filter((x) => typeof x === "string"));
       if (Array.isArray(h)) setHidden(h.filter((x) => typeof x === "string"));
+      // No stored preference and a published page: start from the set that
+      // actually works there. A saved preference always wins, so this only
+      // ever affects someone opening the site for the first time.
+      else if (isPublished()) setHidden(PUBLISHED_HIDDEN);
     } catch { /* ignore */ }
   }, []);
   useEffect(() => { if (mounted) try { localStorage.setItem(LS_ORDER, JSON.stringify(order)); } catch {} }, [order, mounted]);
