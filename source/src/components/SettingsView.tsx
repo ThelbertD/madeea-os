@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { User } from "@supabase/supabase-js";
-import { UserRound, Upload, Trash2, KeyRound, LogOut, Loader2, Check, TriangleAlert, Mail } from "lucide-react";
+import { UserRound, Upload, Trash2, KeyRound, LogOut, Loader2, Check, TriangleAlert, Mail, Users, UserPlus, Copy } from "lucide-react";
 import { getSupabase } from "@/lib/supabaseClient";
 
 const ACCENT = "#fd5812";
@@ -39,6 +39,7 @@ export default function SettingsView() {
       </header>
 
       <ProfileCard user={user} onUser={setUser} />
+      <TeamCard user={user} />
       <PasswordCard user={user} />
       <SignOutCard />
     </div>
@@ -146,6 +147,164 @@ function Avatar({ url, email }: { url: string; email: string }) {
         </div>
       )}
     </div>
+  );
+}
+
+/* ── team ────────────────────────────────────────────────────────────── */
+
+interface Member { user_id: string; email: string; role: string; joined_at: string }
+interface Invite { id: string; email: string; token: string; created_at: string; accepted_at: string | null }
+
+function TeamCard({ user }: { user: User | null }) {
+  const [members, setMembers] = useState<Member[]>([]);
+  const [invites, setInvites] = useState<Invite[]>([]);
+  const [email, setEmail] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<Note>(null);
+  const [copied, setCopied] = useState("");
+
+  const load = useCallback(async () => {
+    const sb = getSupabase();
+    if (!sb) return;
+    const [m, i] = await Promise.all([
+      sb.from("workspace_members").select("user_id, email, role, joined_at").order("joined_at"),
+      sb.from("workspace_invites").select("id, email, token, created_at, accepted_at").is("accepted_at", null).order("created_at", { ascending: false }),
+    ]);
+    if (m.data) setMembers(m.data as Member[]);
+    if (i.data) setInvites(i.data as Invite[]);
+    // The tables are optional: until 0003_team.sql is run these error, and the
+    // card should say so once rather than sit empty and look broken.
+    if (m.error && /relation .* does not exist/i.test(m.error.message)) {
+      setNote({ kind: "err", text: "Team tables are missing — run supabase/migrations/0003_team.sql." });
+    }
+  }, []);
+
+  const linkFor = useCallback((token: string) => {
+    if (typeof window === "undefined") return "";
+    return `${window.location.origin}${window.location.pathname}?invite=${token}`;
+  }, []);
+
+  /* Accepting happens here rather than on a page of its own: the link lands on
+     Settings, and if the visitor is signed in as the invited address the invite
+     closes and they join. RLS enforces both halves — an invite can only be
+     accepted by the address it names, so a leaked token is not a way in. */
+  const acceptFromUrl = useCallback(async () => {
+    if (typeof window === "undefined" || !user) return;
+    const token = new URLSearchParams(window.location.search).get("invite");
+    if (!token) return;
+    const sb = getSupabase();
+    if (!sb) return;
+
+    const upd = await sb.from("workspace_invites")
+      .update({ accepted_at: new Date().toISOString(), accepted_by: user.id })
+      .eq("token", token).is("accepted_at", null).select("email").maybeSingle();
+
+    // Strip the token from the address bar either way, so it is not re-used
+    // on refresh or leaked by copy-paste.
+    window.history.replaceState({}, "", window.location.pathname);
+
+    if (upd.error || !upd.data) {
+      setNote({ kind: "err", text: "That invitation is not for this account, or it has already been used." });
+      return;
+    }
+    await sb.from("workspace_members").upsert(
+      { user_id: user.id, email: user.email ?? upd.data.email, role: "member" },
+      { onConflict: "user_id" },
+    );
+    setNote({ kind: "ok", text: "You've joined the workspace." });
+    load();
+  }, [user, load]);
+
+  useEffect(() => { load(); }, [load]);
+  useEffect(() => { acceptFromUrl(); }, [acceptFromUrl]);
+
+  const invite = useCallback(async () => {
+    const sb = getSupabase();
+    if (!sb || !user) return;
+    const addr = email.trim().toLowerCase();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(addr)) { setNote({ kind: "err", text: "That doesn't look like an email address." }); return; }
+    if (invites.some((i) => i.email === addr)) { setNote({ kind: "err", text: "There's already an open invitation for that address." }); return; }
+
+    setBusy(true); setNote(null);
+    const token = crypto.randomUUID().replace(/-/g, "");
+    const res = await sb.from("workspace_invites").insert({ email: addr, token, invited_by: user.id, role: "member" });
+    setBusy(false);
+    if (res.error) { setNote({ kind: "err", text: res.error.message }); return; }
+    setEmail("");
+    setNote({ kind: "ok", text: "Invitation created — copy the link and send it to them." });
+    load();
+  }, [email, user, invites, load]);
+
+  const revoke = useCallback(async (id: string) => {
+    const sb = getSupabase();
+    if (!sb) return;
+    await sb.from("workspace_invites").delete().eq("id", id);
+    load();
+  }, [load]);
+
+  const copy = useCallback(async (token: string) => {
+    try { await navigator.clipboard.writeText(linkFor(token)); setCopied(token); setTimeout(() => setCopied(""), 1600); }
+    catch { setNote({ kind: "err", text: "Couldn't copy — select the link and copy it manually." }); }
+  }, [linkFor]);
+
+  return (
+    <Card title="Team" icon={<Users size={14} />}>
+      <div className="flex gap-2">
+        <input
+          type="email" value={email} placeholder="teammate@company.com" autoComplete="off"
+          onChange={(e) => setEmail(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") invite(); }}
+          className="flex-1 px-3 py-1.5 rounded-lg text-[12.5px] outline-none"
+          style={{ border: "1px solid var(--line-soft)", background: "rgba(255,255,255,0.03)", color: "var(--cream)" }}
+        />
+        <button type="button" disabled={busy || !user || !email.trim()} onClick={invite}
+          className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-[12px] disabled:opacity-50 shrink-0"
+          style={{ border: `1px solid ${ACCENT}`, color: ACCENT, background: "rgba(253,88,18,0.08)" }}>
+          {busy ? <Loader2 size={12} className="animate-spin" /> : <UserPlus size={12} />} Invite
+        </button>
+      </div>
+
+      {members.length > 0 && (
+        <div className="flex flex-col gap-1">
+          <div className="text-[11px] text-[var(--cream-mute)]">Members</div>
+          {members.map((m) => (
+            <div key={m.user_id} className="flex items-center gap-2 text-[12px] text-[var(--cream)]">
+              <UserRound size={12} color="var(--cream-mute)" className="shrink-0" />
+              <span className="mono truncate flex-1">{m.email}</span>
+              <span className="text-[10.5px] text-[var(--cream-mute)]">{m.role}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {invites.length > 0 && (
+        <div className="flex flex-col gap-1.5">
+          <div className="text-[11px] text-[var(--cream-mute)]">Pending invitations</div>
+          {invites.map((i) => (
+            <div key={i.id} className="flex items-center gap-2">
+              <Mail size={12} color="var(--cream-mute)" className="shrink-0" />
+              <span className="mono text-[12px] text-[var(--cream)] truncate flex-1">{i.email}</span>
+              <button type="button" onClick={() => copy(i.token)}
+                className="flex items-center gap-1 text-[11px] px-2 py-1 rounded-md shrink-0"
+                style={{ border: "1px solid var(--line-soft)", color: "var(--cream-mute)" }}>
+                {copied === i.token ? <Check size={11} /> : <Copy size={11} />} {copied === i.token ? "Copied" : "Copy link"}
+              </button>
+              <button type="button" onClick={() => revoke(i.id)}
+                className="text-[11px] px-2 py-1 rounded-md shrink-0"
+                style={{ border: "1px solid var(--line-soft)", color: "var(--cream-mute)" }}>
+                Revoke
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <p className="text-[11px] text-[var(--cream-mute)]">
+        Invitations aren&apos;t emailed — copy the link and send it however you like. Only the address you
+        invited can accept it, so the link is safe to paste into chat or email.
+      </p>
+      <Notice note={note} />
+    </Card>
   );
 }
 

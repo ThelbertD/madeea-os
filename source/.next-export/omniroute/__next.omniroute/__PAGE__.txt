@@ -2,5 +2,5 @@
 2:I[9275,["5730","static/chunks/44530001-fa4e007628c008b5.js","5188","static/chunks/5188-1324f3bc48a3a7f2.js","8428","static/chunks/8428-75baa1cdc603c61c.js","5991","static/chunks/app/omniroute/page-63f0a2283b261175.js"],"default"]
 3:I[90484,[],"OutletBoundary"]
 4:"$Sreact.suspense"
-0:{"rsc":["$","$1","c",{"children":[["$","div",null,{"className":"flex flex-col","children":["$","$L2",null,{}]}],null,["$","$L3",null,{"children":["$","$4",null,{"name":"Next.MetadataOutlet","children":"$@5"}]}]]}],"isPartial":false,"staleTime":300,"varyParams":null,"buildId":"VKLm0KmbOes01boDXBfvt"}
+0:{"rsc":["$","$1","c",{"children":[["$","div",null,{"className":"flex flex-col","children":["$","$L2",null,{}]}],null,["$","$L3",null,{"children":["$","$4",null,{"name":"Next.MetadataOutlet","children":"$@5"}]}]]}],"isPartial":false,"staleTime":300,"varyParams":null,"buildId":"0sA-XfkjbBvqFj4OV0Nuh"}
 5:null
