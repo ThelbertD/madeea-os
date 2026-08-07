@@ -32,6 +32,10 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+# ...except the template, which carries no values and is the only record of
+# which variables exist. Without this negation `.env*` swallows it and a new
+# developer has nothing to copy.
+!.env.example
 
 # vercel
 .vercel

@@ -14,9 +14,9 @@ Done until its verification line records an actual observed result.
 | 3 | Configure Supabase authentication correctly | Not started |
 | 4 | Disable public signup | Not started |
 | 5 | Configure SMTP for production | Not started |
-| 6 | `.env.example` covering every required variable | Not started |
-| 7 | Validate environment variables at startup | Not started |
-| 8 | Windows setup guide | Not started |
+| 6 | `.env.example` covering every required variable | **Done** |
+| 7 | Validate environment variables at startup | **Done** |
+| 8 | Windows setup guide | **Done** |
 
 ---
 
@@ -52,10 +52,78 @@ new value works with no code change.
 
 ---
 
-## 2–8
+## 2–5
 
-Not started. Each will be filled in here as it is completed, with the command
-run and the result observed.
+Not started — all four are Supabase dashboard changes.
+
+---
+
+## 6. `.env.example` — **Done**
+
+`source/.env.example`, grouped, with **required separated from optional**. Of
+the 82 variables the code reads, only two are genuinely required
+(`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`); the rest each
+switch on one feature. `AGENTIC_OS_CODEX_BIN` is called out as required on
+Windows specifically.
+
+**Verified**
+
+- Coverage, by grepping `process.env` across `src/` and `scripts/` and diffing
+  against the file: **82 read, 0 undocumented** (excluding the five supplied by
+  the OS — `APPDATA`, `HOME`, `PATH`, `SHELL`, `USER`).
+- `git add -n .env.example` → `add 'source/.env.example'`
+- `git add -n .env.local` → refused as ignored
+
+The second pair matters: `.gitignore` had a blanket `.env*` that swallowed the
+template, so it would never have reached the repo. A `!.env.example` negation
+was added — the only `.gitignore` change, and real secrets stay ignored.
+
+## 7. Startup validation — **Done**
+
+`register()` in `src/instrumentation.ts` checks the required variables at boot.
+
+**Fatal only when serving.** `next build` runs this file too, and CI builds with
+no `.env.local`; throwing there would fail the pipeline for something the build
+does not need. Build and export phases log a warning instead.
+
+**Verified**
+
+| Case | Result |
+|---|---|
+| Vars present | serves 200, logs `{"msg":"environment ok","required":2}` |
+| Vars missing | **exit code 1, port never bound** |
+| Build without them | build exit 0 — CI unaffected |
+| Regression check | `npm run smoke` still 6/6 |
+
+The missing-var output names each one and why:
+
+```
+Missing required environment variables:
+  NEXT_PUBLIC_SUPABASE_URL — needed for sign-in; the dashboard is gated behind it
+  NEXT_PUBLIC_SUPABASE_ANON_KEY — needed for sign-in; the dashboard is gated behind it
+```
+
+**Corrected during the work.** The first implementation *threw*, on the
+assumption that would stop the server and give a supervisor a non-zero exit.
+Testing showed otherwise: Next catches the throw, reports "Failed to prepare
+server", then **binds the port and answers every request with 500**. A process
+that is listening but broken is the worst case — health checks look fine while
+users get errors. Changed to `process.exit(1)` and re-verified.
+
+## 8. Windows setup guide — **Done**
+
+`WINDOWS-SETUP.md`: prerequisites, clone, configure, migrations, run, and a
+verification section. Every Troubleshooting entry is a failure that actually
+occurred, not a precaution — the Codex resolver, the Turbopack OOM (where more
+heap makes it worse), CRLF in `.cmd` files, truncated generated types, illegal
+route exports, and scheduled tasks dying with their console.
+
+**Verified** by walking the document against the repository: every path, script
+name and migration filename it references exists, and the commands it gives are
+the ones run in this session.
+
+**Not verified:** nobody has followed it from a clean machine. That is the only
+real test of a setup guide, and it needs a second machine.
 
 ---
 
