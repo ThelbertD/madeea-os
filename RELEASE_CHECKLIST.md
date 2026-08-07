@@ -65,7 +65,7 @@ Separate from the eight blockers above. No features; quality only.
 
 | Item | Status |
 |------|--------|
-| GitHub Actions CI | **Done** |
+| GitHub Actions CI | **Blocked — needs you** |
 | Automated build verification | **Done** |
 | Lint | **Done — non-blocking** |
 | Typecheck | **Done** |
@@ -74,12 +74,31 @@ Separate from the eight blockers above. No features; quality only.
 | Logging | **Done** |
 | Error handling | **Partial** |
 
-### CI — `.github/workflows/ci.yml`
+### CI — `.github/workflows/ci.yml` — **Blocked**
 Runs on push and PR to `main`. Install → typecheck → lint → build → smoke.
 Typecheck, build and smoke block; lint does not (see below).
 
-**Verified:** every step was run locally first. Not yet observed on a GitHub
-runner — the first push is its own first test.
+**The file exists locally but is NOT on GitHub.** The push was rejected:
+
+```
+! [remote rejected] main -> main (refusing to allow an OAuth App to create or
+  update workflow `.github/workflows/ci.yml` without `workflow` scope)
+```
+
+The credential in use cannot create workflow files — the same limitation that
+forced a manual gh-pages branch on madeea-hub. Everything else in this batch
+pushed; only the workflow is held back, so **CI is not running yet**.
+
+**What you do** — either:
+
+1. Add it through the GitHub web UI: Actions → New workflow → paste the contents
+   of the local `.github/workflows/ci.yml`. The web UI is not subject to the
+   token's scope. Simplest.
+2. Or push it yourself from a terminal authenticated with `workflow` scope
+   (`gh auth refresh -s workflow`), then `git add .github && git commit && git push`.
+
+**Verified:** every step was run locally first — see below. Not yet observed on
+a GitHub runner, since it has never run.
 
 ### Typecheck — `npm run typecheck`
 **Verified:** `tsc --noEmit` → exit 0.
